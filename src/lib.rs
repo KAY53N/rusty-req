@@ -202,7 +202,7 @@ fn format_datetime(time: SystemTime) -> String {
 }
 
 #[pymodule]
-fn rust_http_client(_py: Python, m: &PyModule) -> PyResult<()> {
+fn rusty_req(_py: Python, m: &PyModule) -> PyResult<()> {
     m.add_class::<RequestItem>()?;
     m.add_function(wrap_pyfunction!(fetch_requests, m)?)?;
     Ok(())
