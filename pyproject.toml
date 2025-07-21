@@ -1,0 +1,23 @@
+[build-system]
+requires = ["maturin>=1.4,<2.0"]
+build-backend = "maturin"
+
+[project]
+name = "rusty-req"
+version = "0.1.0"
+description = "High-performance async HTTP client built with Rust for Python."
+readme = "README.md"
+authors = [{ name = "kaysen", email = "kaysen820@gmail.com" }]
+license = "MIT"
+requires-python = ">=3.7"
+classifiers = [
+    "Programming Language :: Python",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Rust",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: OS Independent",
+]
+
+[tool.maturin]
+bindings = "pyo3"
+module-name = "rusty_req"
