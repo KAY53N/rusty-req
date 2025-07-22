@@ -38,5 +38,5 @@ jobs:
       - name: Publish to PyPI
         if: github.ref == 'refs/heads/main' && github.event_name == 'push'
         env:
-          PYPI_TOKEN: ${{ secrets.PYPI_API_TOKEN }}
+          MATURIN_PYPI_TOKEN: ${{ secrets.PYPI_API_TOKEN }}
         run: maturin publish --skip-existing
