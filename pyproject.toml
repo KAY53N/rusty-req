@@ -18,6 +18,12 @@ classifiers = [
     "Operating System :: OS Independent",
 ]
 
+[project.urls]
+"Homepage" = "https://github.com/kaysen820/rusty-req"
+"Repository" = "https://github.com/kaysen820/rusty-req"
+"Bug Tracker" = "https://github.com/kaysen820/rusty-req/issues"
+"Documentation" = "https://github.com/kaysen820/rusty-req#readme"
+
 [tool.maturin]
 bindings = "pyo3"
 module-name = "rusty_req"
