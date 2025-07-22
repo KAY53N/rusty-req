@@ -1,15 +1,3 @@
-[package]
-name = "rusty-req"
-version = "0.1.6"
-edition = "2021"
-authors = [ "kaysen <kaysen820@gmail.com>",]
-description = "High-performance async HTTP client built with Rust for Python."
-license = "MIT"
-homepage = "https://github.com/KAY53N/rusty-req"
-repository = "https://github.com/KAY53N/rusty-req"
-documentation = "https://github.com/KAY53N/rusty-req#readme"
-readme = "README.md"
-
 [build-system]
 requires = [ "maturin>=1.4,<2.0",]
 build-backend = "maturin"
