@@ -1,14 +1,26 @@
 [package]
 name = "rusty-req"
-version = "0.1.4"
+version = "0.1.5"
 edition = "2021"
 
 [dependencies]
-pyo3 = { version = "0.20", features = ["extension-module"] }
-pyo3-asyncio = { version = "0.20", features = ["tokio-runtime"] }
-tokio = { version = "1.0", features = ["full"] }
-reqwest = { version = "0.11", features = ["json", "brotli", "gzip", "deflate", "stream"] }
 serde_json = "1.0"
 chrono = "0.4"
 futures = "0.3"
 once_cell = "1.18"
+
+[dependencies.pyo3]
+version = "0.20"
+features = [ "extension-module",]
+
+[dependencies.pyo3-asyncio]
+version = "0.20"
+features = [ "tokio-runtime",]
+
+[dependencies.tokio]
+version = "1.0"
+features = [ "full",]
+
+[dependencies.reqwest]
+version = "0.11"
+features = [ "json", "brotli", "gzip", "deflate", "stream",]
