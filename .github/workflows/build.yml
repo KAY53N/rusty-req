@@ -1,0 +1,38 @@
+name: Build and Publish Rust Python Extension
+
+on:
+  push:
+    tags:
+      - 'v*.*.*'  # 触发条件：打 tag 时触发发布
+
+jobs:
+  build-and-publish:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Rust
+        uses: actions-rs/toolchain@v1
+        with:
+          profile: minimal
+          toolchain: stable
+          override: true
+
+      - name: Setup Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: 3.10
+
+      - name: Upgrade pip
+        run: pip install --upgrade pip
+
+      - name: Install maturin
+        run: pip install maturin
+
+      - name: Build Rust Python extension
+        run: maturin build --release
+
+      - name: Publish to PyPI
+        env:
+          PYPI_TOKEN: ${{ secrets.PYPI_API_TOKEN }}
+        run: maturin publish --skip-existing
