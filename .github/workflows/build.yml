@@ -9,7 +9,7 @@ on:
       - main   # PR 目标分支为 main 时触发
 
 jobs:
-  build-and-publish:
+  build-ubuntu:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -35,8 +35,53 @@ jobs:
       - name: Build Rust Python extension
         run: maturin build --release
 
+      - name: List generated wheel files
+        run: ls -lh target/wheels/*.whl || echo "No wheel files found"
+
+      - name: Upload wheels as artifact
+        uses: actions/upload-artifact@v3
+        with:
+          name: wheels-ubuntu
+          path: target/wheels/*.whl
+
       - name: Publish to PyPI
         if: github.ref == 'refs/heads/main' && github.event_name == 'push'
         env:
           MATURIN_PYPI_TOKEN: ${{ secrets.PYPI_API_TOKEN }}
         run: maturin publish --skip-existing
+
+
+  build-macos:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Rust
+        uses: actions-rs/toolchain@v1
+        with:
+          profile: minimal
+          toolchain: stable
+          override: true
+
+      - name: Setup Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: 3.12.11
+
+      - name: Upgrade pip
+        run: pip install --upgrade pip
+
+      - name: Install maturin
+        run: pip install maturin
+
+      - name: Build Rust Python extension
+        run: maturin build --release
+
+      - name: List generated wheel files
+        run: ls -lh target/wheels/*.whl || echo "No wheel files found"
+
+      - name: Upload wheels as artifact
+        uses: actions/upload-artifact@v3
+        with:
+          name: wheels-macos
+          path: target/wheels/*.whl
