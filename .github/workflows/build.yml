@@ -3,14 +3,16 @@ name: Build and Publish Rust Python Extension
 on:
   push:
     branches:
-      - main   # 代码提交到 main 分支触发
+      - main
   pull_request:
     branches:
-      - main   # PR 目标分支为 main 时触发
+      - main
 
 jobs:
   build-ubuntu:
     runs-on: ubuntu-latest
+    outputs:
+      wheel_name: ${{ steps.get-wheel.outputs.name }}
     steps:
       - uses: actions/checkout@v4
 
@@ -43,13 +45,6 @@ jobs:
         with:
           name: wheels-ubuntu
           path: target/wheels/*.whl
-
-      - name: Publish to PyPI
-        if: github.ref == 'refs/heads/main' && github.event_name == 'push'
-        env:
-          MATURIN_PYPI_TOKEN: ${{ secrets.PYPI_API_TOKEN }}
-        run: maturin publish --skip-existing
-
 
   build-macos:
     runs-on: macos-latest
@@ -85,3 +80,38 @@ jobs:
         with:
           name: wheels-macos
           path: target/wheels/*.whl
+
+  publish-to-pypi:
+    needs: [build-ubuntu, build-macos]
+    runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: 3.12.10
+
+      - name: Install maturin
+        run: pip install maturin
+
+      - name: Download Ubuntu wheels
+        uses: actions/download-artifact@v4
+        with:
+          name: wheels-ubuntu
+          path: dist/
+
+      - name: Download macOS wheels
+        uses: actions/download-artifact@v4
+        with:
+          name: wheels-macos
+          path: dist/
+
+      - name: List all wheels
+        run: ls -lh dist
+
+      - name: Publish to PyPI
+        env:
+          MATURIN_PYPI_TOKEN: ${{ secrets.PYPI_API_TOKEN }}
+        run: maturin publish --skip-existing --no-build --out dist
