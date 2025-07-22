@@ -1,3 +1,4 @@
+#![allow(non_local_definitions)]
 use pyo3::prelude::*;
 use pyo3::types::{PyDict, PyList};
 use std::collections::HashMap;
@@ -8,6 +9,7 @@ use serde_json::Value;
 use chrono::{DateTime, Local};
 use once_cell::sync::Lazy;
 use tokio::sync::Mutex;
+use reqwest::header::{HeaderMap, HeaderName, HeaderValue, ACCEPT_ENCODING, CONNECTION};
 
 
 // 全局共享的HTTP客户端
@@ -31,6 +33,8 @@ pub struct RequestItem {
     pub timeout: Option<f64>,
     #[pyo3(get, set)]
     pub tag: Option<String>, // ✅ 新增字段
+    #[pyo3(get, set)]
+    pub headers: Option<Py<PyDict>>, // ✅ 新增字段
 }
 
 #[pymethods]
@@ -42,8 +46,9 @@ impl RequestItem {
         params: Option<Py<PyDict>>,
         timeout: Option<f64>,
         tag: Option<String>, // ✅ 新增字段
+        headers: Option<Py<PyDict>>, // ✅ 新增字段
     ) -> Self {
-        Self { url, method, params, timeout, tag }
+        Self { url, method, params, timeout, tag, headers }
     }
 }
 
@@ -102,6 +107,32 @@ fn fetch_requests<'py>(
                         &req.url
                     );
 
+                    // 设置 Header
+                    let mut headers = HeaderMap::new();
+
+                    // 默认值
+                    headers.insert(ACCEPT_ENCODING, HeaderValue::from_static("gzip, deflate, br"));
+                    headers.insert(CONNECTION, HeaderValue::from_static("keep-alive"));
+
+                    // 如果 Python 中传了 headers，就覆盖或追加
+                    if let Some(py_headers) = &req.headers {
+                        if let Ok(dict) = py_headers.as_ref(py).downcast::<PyDict>() {
+                            for (k, v) in dict.iter() {
+                                if let (Ok(k_str), Ok(v_str)) = (k.extract::<String>(), v.extract::<String>()) {
+                                    if let (Ok(h_name), Ok(h_val)) = (
+                                        HeaderName::from_bytes(k_str.as_bytes()),
+                                        HeaderValue::from_str(&v_str),
+                                    ) {
+                                        headers.insert(h_name, h_val);
+                                    }
+                                }
+                            }
+                        }
+                    }
+
+                    builder = builder.headers(headers);
+
+                    // 设置 body 参数
                     if let Some(params_dict) = &req.params {
                         if let Ok(dict) = params_dict.as_ref(py).downcast::<PyDict>() {
                             if let Ok(json_value) = py_to_json(py, dict) {
@@ -109,6 +140,7 @@ fn fetch_requests<'py>(
                             }
                         }
                     }
+
                     builder
                 });
 

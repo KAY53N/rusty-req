@@ -1,6 +1,6 @@
 [package]
-name = "rust_http_client"
-version = "0.1.0"
+name = "rusty_req"
+version = "0.1.2"
 edition = "2021"
 
 [dependencies]
