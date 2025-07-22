@@ -1,5 +1,5 @@
 [package]
-name = "rusty_req"
+name = "rusty-req"
 version = "0.1.2"
 edition = "2021"
 
