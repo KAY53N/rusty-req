@@ -1,24 +1,68 @@
 #![allow(non_local_definitions)]
-use pyo3::prelude::*;
-use pyo3::types::{PyDict, PyList};
+// PyO3 宏和类型
+use pyo3::{pyclass, pymethods, pyfunction, pymodule};
+use pyo3::{PyResult, Python, PyAny, Py, wrap_pyfunction};
+use pyo3::types::{PyDict, PyList, PyModule};
+use pyo3::IntoPy;
+
+// 其他库
 use std::collections::HashMap;
-use reqwest::Client;
+use reqwest::{Client, Request, StatusCode};
 use std::time::{Duration, SystemTime};
 use futures::future::join_all;
 use serde_json::Value;
 use chrono::{DateTime, Local};
 use once_cell::sync::Lazy;
 use tokio::sync::Mutex;
+use std::sync::atomic::{AtomicBool, Ordering};
 use reqwest::header::{HeaderMap, HeaderName, HeaderValue, ACCEPT_ENCODING, CONNECTION};
 
+static DEBUG_MODE: AtomicBool = AtomicBool::new(false);
 
 // 全局共享的HTTP客户端
 static GLOBAL_CLIENT: Lazy<Mutex<Client>> = Lazy::new(|| {
     Mutex::new(Client::builder()
         .timeout(Duration::from_secs(30))
+        .gzip(true)       // 开启 gzip 自动解压
+        .brotli(true)     // 开启 brotli 自动解压
+        .deflate(true)    // 开启 deflate 自动解压
         .build()
         .expect("Failed to create HTTP client"))
 });
+
+#[pyfunction]
+fn set_debug(enabled: bool) {
+    DEBUG_MODE.store(enabled, Ordering::Relaxed);
+}
+
+pub fn is_debug() -> bool {
+    DEBUG_MODE.load(Ordering::Relaxed)
+}
+
+fn debug_log(
+    tag: &str,
+    request: &Request,
+    status: StatusCode,
+    headers: &HeaderMap,
+    body: &str,
+) {
+    if !is_debug() {
+        return;
+    }
+
+    println!("\n================== [DEBUG: {}] ==================", tag);
+    println!("Request Method : {}", request.method());
+    println!("Request URL    : {}", request.url());
+    println!("--------------------------------------------------");
+    println!("Response Status: {}", status);
+    println!("Response Headers:");
+    for (key, value) in headers.iter() {
+        println!("  {}: {:?}", key, value);
+    }
+    println!("--------------------------------------------------");
+    println!("Response Body:\n{}", body);
+    println!("==================================================\n");
+}
 
 #[pyclass]
 #[derive(Clone)]
@@ -145,10 +189,16 @@ fn fetch_requests<'py>(
                 });
 
                 // 发起请求，使用单个请求超时控制
-                let timeout = Duration::from_secs_f64(req.timeout.unwrap_or(5.0).max(5.0));
+                let timeout = Duration::from_secs_f64(req.timeout.unwrap_or(3.0).max(3.0));
+                let tag = req.tag.clone().unwrap_or_else(|| "no-tag".to_string());
+                let request_to_send = builder.try_clone().unwrap().build().unwrap();
                 match tokio::time::timeout(timeout, builder.send()).await {
                     Ok(Ok(res)) => {
+                        let status = res.status();
+                        let headers = res.headers().clone();  // 必须 clone，HeaderMap 实现了 Clone
+
                         if let Ok(text) = res.text().await {
+                            debug_log(&tag, &request_to_send, status, &headers, &text);
                             result.insert("response".to_string(), text);
                         }
                     },
@@ -237,5 +287,6 @@ fn format_datetime(time: SystemTime) -> String {
 fn rusty_req(_py: Python, m: &PyModule) -> PyResult<()> {
     m.add_class::<RequestItem>()?;
     m.add_function(wrap_pyfunction!(fetch_requests, m)?)?;
+    m.add_function(wrap_pyfunction!(set_debug, m)?)?;
     Ok(())
 }

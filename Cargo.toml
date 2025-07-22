@@ -7,7 +7,7 @@ edition = "2021"
 pyo3 = { version = "0.20", features = ["extension-module"] }
 pyo3-asyncio = { version = "0.20", features = ["tokio-runtime"] }
 tokio = { version = "1.0", features = ["full"] }
-reqwest = { version = "0.11", features = ["json"] }
+reqwest = { version = "0.11", features = ["json", "brotli", "gzip", "deflate", "stream"] }
 serde_json = "1.0"
 chrono = "0.4"
 futures = "0.3"

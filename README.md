@@ -28,11 +28,11 @@ pip install target/wheels/rusty_req-*.whl
 ```python
 import asyncio
 import time
-from rusty_req import fetch_requests, RequestItem
+import rusty_req
 
 async def main():
     requests = [
-        RequestItem(
+        rusty_req.RequestItem(
             url="https://httpbin.org/headers",
             method="GET",
             params=None,
@@ -48,7 +48,9 @@ async def main():
     ]
 
     start = time.perf_counter()
-    responses = await fetch_requests(requests, total_timeout=5.0)
+    
+    rusty_req.set_debug(False)
+    responses = await rusty_req.fetch_requests(requests, total_timeout=5.0)
     duration = time.perf_counter() - start
 
     success = sum(1 for r in responses if not r["error"])
