@@ -1,13 +1,25 @@
+[package]
+name = "rusty-req"
+version = "0.1.4"
+edition = "2021"
+authors = ["kaysen <kaysen820@gmail.com>"]
+description = "High-performance async HTTP client built with Rust for Python."
+license = "MIT"
+homepage = "https://github.com/KAY53N/rusty-req"
+repository = "https://github.com/KAY53N/rusty-req"
+documentation = "https://github.com/KAY53N/rusty-req#readme"
+readme = "README.md"
+
 [build-system]
 requires = ["maturin>=1.4,<2.0"]
 build-backend = "maturin"
 
 [project]
 name = "rusty-req"
-version = "0.1.2"
+version = "0.1.4"
 description = "High-performance async HTTP client built with Rust for Python."
 readme = "README.md"
-authors = [{ name = "kaysen", email = "kaysen820@gmail.com" }]
+authors = [{ name = "KAY53N", email = "kaysen820@gmail.com" }]
 license = "MIT"
 requires-python = ">=3.7"
 classifiers = [
@@ -19,10 +31,10 @@ classifiers = [
 ]
 
 [project.urls]
-"Homepage" = "https://github.com/kaysen820/rusty-req"
-"Repository" = "https://github.com/kaysen820/rusty-req"
-"Bug Tracker" = "https://github.com/kaysen820/rusty-req/issues"
-"Documentation" = "https://github.com/kaysen820/rusty-req#readme"
+"Homepage" = "https://github.com/KAY53N/rusty-req"
+"Repository" = "https://github.com/KAY53N/rusty-req"
+"Bug Tracker" = "https://github.com/KAY53N/rusty-req/issues"
+"Documentation" = "https://github.com/KAY53N/rusty-req#readme"
 
 [tool.maturin]
 bindings = "pyo3"

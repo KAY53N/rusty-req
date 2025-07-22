@@ -98,8 +98,9 @@ RequestItem(
     url="https://httpbin.org/headers",
     method="GET",
     headers={
-        "User-Agent": "MyApp/1.0",
-        "X-Custom": "123"
+        "Accept-Encoding": "gzip, deflate, br",
+        "Connection": "keep-alive",
+        "X-Test-Header": "ChatGPT"
     },
     timeout=5.0
 )
