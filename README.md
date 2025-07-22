@@ -1,5 +1,6 @@
 # rusty-req
 
+
 基于 Rust + Python 的高性能异步请求库，适用于需要批量发送 HTTP 请求的场景。通过 Rust 实现并发请求逻辑，并通过 [maturin](https://github.com/PyO3/maturin) 封装为 Python 模块，兼具性能与易用性。
 
 ## 🔧 安装
