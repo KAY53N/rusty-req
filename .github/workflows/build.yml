@@ -2,8 +2,11 @@ name: Build and Publish Rust Python Extension
 
 on:
   push:
-    tags:
-      - 'v*.*.*'  # 触发条件：打 tag 时触发发布
+    branches:
+      - main   # 代码提交到 main 分支触发
+  pull_request:
+    branches:
+      - main   # PR 目标分支为 main 时触发
 
 jobs:
   build-and-publish:
@@ -33,6 +36,7 @@ jobs:
         run: maturin build --release
 
       - name: Publish to PyPI
+        if: github.ref == 'refs/heads/main' && github.event_name == 'push'
         env:
           PYPI_TOKEN: ${{ secrets.PYPI_API_TOKEN }}
         run: maturin publish --skip-existing
