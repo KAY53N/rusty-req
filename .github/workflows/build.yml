@@ -92,6 +92,7 @@ jobs:
           profile: minimal
           toolchain: stable
           override: true
+          components: rust-analyzer, rust-src
 
       - name: Setup Python
         uses: actions/setup-python@v4
@@ -108,13 +109,28 @@ jobs:
         run: python -m maturin build --release
 
       - name: List generated wheel files
-        run: dir /b target\wheels\*.whl || echo "No wheel files found"
+        run: |
+          $wheels = Get-ChildItem -Path "target\wheels\*.whl" -ErrorAction SilentlyContinue
+          if ($wheels) {
+              $wheels | ForEach-Object { Write-Output "Found wheel: $_" }
+          } else {
+              Write-Output "No wheel files found in target\wheels"
+              # Check alternative location
+              $altWheels = Get-ChildItem -Path "target\release\wheels\*.whl" -ErrorAction SilentlyContinue
+              if ($altWheels) {
+                  $altWheels | ForEach-Object { Write-Output "Found wheel in alternative location: $_" }
+              } else {
+                  Write-Output "No wheel files found in target\release\wheels either"
+              }
+          }
 
       - name: Upload wheels as artifact
         uses: actions/upload-artifact@v4
         with:
           name: wheels-windows
-          path: target\wheels\*.whl
+          path: |
+            target\wheels\*.whl
+            target\release\wheels\*.whl
 
   publish-to-pypi:
     needs: [build-ubuntu, build-macos, build-windows]
