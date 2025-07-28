@@ -165,10 +165,17 @@ jobs:
           name: wheels-windows
           path: dist/
 
+      - name: Flatten wheel files
+        run: |
+          mkdir -p dist/flat
+          find dist -name '*.whl' -exec cp {} dist/flat/ \;
+          mv dist/flat/*.whl dist/ || true
+          rm -rf dist/flat
+
       - name: List all wheels
-        run: ls -lh dist
+        run: ls -lh dist/*.whl || echo "No wheel files found"
 
       - name: Upload all wheels to PyPI
         env:
           MATURIN_PYPI_TOKEN: ${{ secrets.PYPI_API_TOKEN }}
-        run: maturin upload --skip-existing dist/*
+        run: maturin upload --skip-existing dist/*.whl
