@@ -120,7 +120,7 @@ jobs:
             target\release\wheels\*.whl
 
   publish-to-pypi:
-    needs: [build-ubuntu, build-macos, build-windows]
+    needs: [ build-linux, build-macos, build-windows ]
     runs-on: ubuntu-latest
     if: github.ref == 'refs/heads/main' && github.event_name == 'push'
     steps:
