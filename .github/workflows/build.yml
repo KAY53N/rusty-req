@@ -9,24 +9,42 @@ on:
       - main
 
 jobs:
-  build-linux:
+  build-ubuntu:
     runs-on: ubuntu-latest
+    outputs:
+      wheel_name: ${{ steps.get-wheel.outputs.name }}
     steps:
       - uses: actions/checkout@v4
 
-      - name: Install OpenSSL dev packages on runner
-        run: sudo apt-get update && sudo apt-get install -y libssl-dev pkg-config
-
-      - name: Build wheels using maturin in manylinux2014 container
-        uses: PyO3/maturin-action@v1
+      - name: Setup Rust
+        uses: actions-rs/toolchain@v1
         with:
-          manylinux: manylinux2014
-          command: build
-          args: --release --out dist
-        env:
-          RUST_BACKTRACE: 1
-          CARGO_TERM_COLOR: always
+          profile: minimal
+          toolchain: stable
+          override: true
 
+      - name: Setup Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: 3.11.3
+
+      - name: Upgrade pip
+        run: pip install --upgrade pip
+
+      - name: Install maturin
+        run: pip install maturin
+
+      - name: Build Rust Python extension
+        run: maturin build --release
+
+      - name: List generated wheel files
+        run: ls -lh target/wheels/*.whl || echo "No wheel files found"
+
+      - name: Upload wheels as artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: wheels-ubuntu
+          path: target/wheels/*.whl
 
   build-macos:
     runs-on: macos-latest
@@ -51,8 +69,8 @@ jobs:
       - name: Install maturin
         run: pip install maturin
 
-      - name: Build Rust Python extension (abi3)
-        run: maturin build --release --interpreter python3.11
+      - name: Build Rust Python extension
+        run: maturin build --release
 
       - name: List generated wheel files
         run: ls -lh target/wheels/*.whl || echo "No wheel files found"
@@ -87,8 +105,8 @@ jobs:
       - name: Install maturin
         run: python -m pip install maturin
 
-      - name: Build Rust Python extension (abi3)
-        run: maturin build --release --interpreter python3.11
+      - name: Build Rust Python extension
+        run: python -m maturin build --release
 
       - name: List generated wheel files
         run: |
@@ -115,7 +133,7 @@ jobs:
             target\release\wheels\*.whl
 
   publish-to-pypi:
-    needs: [ build-linux, build-macos, build-windows ]
+    needs: [build-ubuntu, build-macos, build-windows]
     runs-on: ubuntu-latest
     if: github.ref == 'refs/heads/main' && github.event_name == 'push'
     steps:

@@ -4,7 +4,7 @@ build-backend = "maturin"
 
 [project]
 name = "rusty-req"
-version = "0.1.9"
+version = "0.1.7"
 description = "High-performance async HTTP client built with Rust for Python."
 readme = "README.md"
 license = "MIT"
@@ -21,7 +21,5 @@ Repository = "https://github.com/KAY53N/rusty-req"
 Documentation = "https://github.com/KAY53N/rusty-req#readme"
 
 [tool.maturin]
-abi3-py-version = "3.7"
-bindings = "pyo3-abi3"
+bindings = "pyo3"
 module-name = "rusty_req"
-compatibility = "manylinux2014"
