@@ -9,41 +9,28 @@ on:
       - main
 
 jobs:
-  build-ubuntu:
+  build-linux:
     runs-on: ubuntu-latest
-    outputs:
-      wheel_name: ${{ steps.get-wheel.outputs.name }}
+    container: quay.io/pypa/manylinux2014_x86_64
     steps:
       - uses: actions/checkout@v4
 
       - name: Setup Rust
-        uses: actions-rs/toolchain@v1
-        with:
-          profile: minimal
-          toolchain: stable
-          override: true
+        run: |
+          curl https://sh.rustup.rs -sSf | sh -s -- -y
+          source $HOME/.cargo/env
 
-      - name: Setup Python
-        uses: actions/setup-python@v4
-        with:
-          python-version: 3.11.3
+      - name: Build wheels for multiple Python versions
+        run: |
+          for PYBIN in /opt/python/cp3{10,11,12}*/bin; do
+            "${PYBIN}/pip" install maturin
+            "${PYBIN}/maturin" build --release --compatibility manylinux2014 --interpreter "${PYBIN}/python"
+          done
 
-      - name: Upgrade pip
-        run: pip install --upgrade pip
-
-      - name: Install maturin
-        run: pip install maturin
-
-      - name: Build Rust Python extension (abi3)
-        run: maturin build --release --interpreter python3.11
-
-      - name: List generated wheel files
-        run: ls -lh target/wheels/*.whl || echo "No wheel files found"
-
-      - name: Upload wheels as artifact
+      - name: Upload wheels
         uses: actions/upload-artifact@v4
         with:
-          name: wheels-ubuntu
+          name: wheels-linux
           path: target/wheels/*.whl
 
   build-macos:
