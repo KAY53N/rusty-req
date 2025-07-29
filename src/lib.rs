@@ -76,9 +76,9 @@ pub struct RequestItem {
     #[pyo3(get, set)]
     pub timeout: Option<f64>,
     #[pyo3(get, set)]
-    pub tag: Option<String>, // ✅ 新增字段
+    pub tag: Option<String>,
     #[pyo3(get, set)]
-    pub headers: Option<Py<PyDict>>, // ✅ 新增字段
+    pub headers: Option<Py<PyDict>>,
 }
 
 #[pymethods]
@@ -89,8 +89,8 @@ impl RequestItem {
         method: Option<String>,
         params: Option<Py<PyDict>>,
         timeout: Option<f64>,
-        tag: Option<String>, // ✅ 新增字段
-        headers: Option<Py<PyDict>>, // ✅ 新增字段
+        tag: Option<String>,
+        headers: Option<Py<PyDict>>,
     ) -> Self {
         Self { url, method, params, timeout, tag, headers }
     }
@@ -140,7 +140,6 @@ fn fetch_requests<'py>(
             async move {
                 let mut result = HashMap::new();
                 result.insert("response".to_string(), String::new());
-                result.insert("error".to_string(), String::new());
 
                 let start = SystemTime::now();
 
@@ -195,18 +194,35 @@ fn fetch_requests<'py>(
                 match tokio::time::timeout(timeout, builder.send()).await {
                     Ok(Ok(res)) => {
                         let status = res.status();
-                        let headers = res.headers().clone();  // 必须 clone，HeaderMap 实现了 Clone
+                        let headers = res.headers().clone();
 
-                        if let Ok(text) = res.text().await {
-                            debug_log(&tag, &request_to_send, status, &headers, &text);
+                        let text = res.text().await.unwrap_or_else(|e| format!("Failed to read response text: {}", e));
+
+                        debug_log(&tag, &request_to_send, status, &headers, &text);
+
+                        if !status.is_success() {
+                            // 状态码非 2xx，视为错误，构造异常
+                            let mut exc = serde_json::Map::new();
+                            exc.insert("type".to_string(), Value::String("HttpStatusError".to_string()));
+                            exc.insert("message".to_string(), Value::String(format!("HTTP status error: {} - {}", status.as_u16(), text)));
+                            result.insert("exception".to_string(), Value::Object(exc).to_string());
+                        } else {
+                            // 状态码成功，返回响应文本
                             result.insert("response".to_string(), text);
                         }
-                    },
+                    }
                     Ok(Err(e)) => {
-                        result.insert("error".to_string(), format!("Request error: {}", e));
-                    },
+                        let mut exc = serde_json::Map::new();
+                        exc.insert("type".to_string(), Value::String("HttpError".to_string()));
+                        exc.insert("message".to_string(), Value::String(format!("Request error: {}", e)));
+                        result.insert("exception".to_string(), Value::Object(exc).to_string());
+                    }
                     Err(_) => {
-                        result.insert("error".to_string(), "Request timeout".to_string());
+                        let err_msg = format!("Request timeout after {:.2} seconds", timeout.as_secs_f64());
+                        let mut exc = serde_json::Map::new();
+                        exc.insert("type".to_string(), Value::String("Timeout".to_string()));
+                        exc.insert("message".to_string(), Value::String(err_msg));
+                        result.insert("exception".to_string(), Value::Object(exc).to_string());
                     }
                 }
 
@@ -219,14 +235,12 @@ fn fetch_requests<'py>(
                 let end_str = format_datetime(end);
 
                 let mut meta = serde_json::Map::new();
-                meta.insert("requestTime".to_string(), Value::String(format!("{} -> {}", start_str, end_str)));
-                meta.insert("processTime".to_string(), Value::String(format!("{:.4}", process_time)));
+                meta.insert("request_time".to_string(), Value::String(format!("{} -> {}", start_str, end_str)));
+                meta.insert("process_time".to_string(), Value::String(format!("{:.4}", process_time)));
                 if let Some(tag) = req.tag.clone() {
                     meta.insert("tag".to_string(), Value::String(tag));
                 }
-
                 result.insert("meta".to_string(), Value::Object(meta).to_string());
-
                 result
             }
         });
@@ -239,11 +253,14 @@ fn fetch_requests<'py>(
                 requests.iter().map(|req| {
                     let mut res = HashMap::new();
                     res.insert("response".to_string(), String::new());
-                    res.insert("error".to_string(), "TOTAL_OPERATION_TIMEOUT".to_string());
+                    let mut exc = serde_json::Map::new();
+                    exc.insert("type".to_string(), Value::String("GlobalTimeout".to_string()));
+                    exc.insert("message".to_string(), Value::String("Total operation timed out".to_string()));
+                    res.insert("exception".to_string(), Value::Object(exc).to_string());
 
                     let mut meta = serde_json::Map::new();
-                    meta.insert("requestTime".to_string(), Value::String("".to_string()));
-                    meta.insert("processTime".to_string(), Value::String("0.0000".to_string()));
+                    meta.insert("request_time".to_string(), Value::String("".to_string()));
+                    meta.insert("process_time".to_string(), Value::String("0.0000".to_string()));
                     if let Some(tag) = req.tag.clone() {
                         meta.insert("tag".to_string(), Value::String(tag));
                     }
@@ -260,7 +277,6 @@ fn fetch_requests<'py>(
 
                 // 这里不调用 as_str()
                 dict.set_item("response", &res["response"])?;
-                dict.set_item("error", &res["error"])?;
 
                 // 这里用 get + map 保证安全，res.get("meta") -> Option<&String>
                 let meta_json_str = res.get("meta").map(|s| s.as_str()).unwrap_or("{}");
@@ -270,6 +286,13 @@ fn fetch_requests<'py>(
                     .call_method1("loads", (meta_json_str,))?;
 
                 dict.set_item("meta", meta_pyobj)?;
+
+                if let Some(exc_str) = res.get("exception") {
+                    let exc_obj = py
+                        .import("json")?
+                        .call_method1("loads", (exc_str,))?;
+                    dict.set_item("exception", exc_obj)?;
+                }
 
                 Ok(dict.into_py(py))
             }).collect::<PyResult<Vec<Py<PyAny>>>>()

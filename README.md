@@ -16,6 +16,11 @@ maturin build --release
 pip install target/wheels/rusty_req-*.whl
 ```
 
+## 开发调试
+```
+cargo watch -s "maturin develop"
+```
+
 ## 🚀 功能特点
 
 - 批量异步发送 HTTP 请求（支持 GET / POST）
@@ -31,35 +36,65 @@ import asyncio
 import time
 import rusty_req
 
+
 async def main():
+    # Using JSONPlaceholder - a free fake API for testing
     requests = [
         rusty_req.RequestItem(
-            url="https://httpbin.org/headers",
+            url="https://httpbin.org/delay/2",
             method="GET",
-            params=None,
-            timeout=3.0,
-            tag=f"test-get-{i}",
-            headers={
-                "Accept-Encoding": "gzip, deflate, br",
-                "Connection": "keep-alive",
-                "X-Test-Header": "ChatGPT"
-            }
+            timeout=2.9,
+            tag=f"json-test-{i}",
         )
-        for i in range(100)
+        for i in range(100)  # 100 concurrent requests
     ]
 
-    start = time.perf_counter()
-    
+    # Disable debug output
     rusty_req.set_debug(False)
-    responses = await rusty_req.fetch_requests(requests, total_timeout=5.0)
-    duration = time.perf_counter() - start
 
-    success = sum(1 for r in responses if not r["error"])
-    failure = len(responses) - success
+    print("🚀 Starting 100 concurrent JSON API requests...")
+    start_time = time.perf_counter()
 
-    print(f"✅ 成功请求数: {success}")
-    print(f"❌ 失败请求数: {failure}")
-    print(f"⏱️ 总耗时: {duration:.2f} 秒")
+    responses = await rusty_req.fetch_requests(
+        requests,
+        total_timeout=3.0
+    )
+
+    total_time = time.perf_counter() - start_time
+
+    # Process results
+    success = 0
+    failed = 0
+    status_codes = {}
+    response_times = []
+
+    for r in responses:
+        if r.get("exception"):
+            failed += 1
+        else:
+            meta = r.get('meta', {})
+            status_code = meta.get("status_code", 0)
+            process_time = meta.get("process_time", 0)
+
+            status_codes[status_code] = status_codes.get(status_code, 0) + 1
+            response_times.append(process_time)
+            success += 1
+
+    # Calculate statistics
+    avg_response_time = sum(response_times) / len(response_times) if response_times else 0
+    min_response_time = min(response_times) if response_times else 0
+    max_response_time = max(response_times) if response_times else 0
+    req_per_sec = success / total_time if total_time > 0 else 0
+
+    print("\n📊 Load Test Results:")
+    print(f"⏱️ Total time: {total_time:.2f}s")
+    print(f"📈 Requests/sec: {req_per_sec:.1f}")
+    print(f"✅ Successful: {success}")
+    print(f"⚠️ Failed: {failed}")
+    print(f"🔄 Status codes: {status_codes}")
+    print(
+        f"⏳ Response times - Avg: {avg_response_time:.4f}s, Min: {min_response_time:.4f}s, Max: {max_response_time:.4f}s")
+
 
 if __name__ == "__main__":
     asyncio.run(main())
@@ -81,17 +116,14 @@ if __name__ == "__main__":
 ### 返回格式
 
 ```python
-[
-    {
-        "response": str | None,  # 成功时返回内容
-        "error": str | None,     # 失败时错误信息
-        "meta": {
-            "tag": str,
-            "elapsed_ms": float  # 请求耗时（毫秒）
-        }
-    },
-    ...
-]
+{
+    "response": "{\"code\":403,\"msg\":\"Method Not Allowed.\"}",
+    "meta": {
+        "process_time": "0.2439",
+        "request_time": "2025-07-29 19:17:11 -> 2025-07-29 19:17:11",
+        "tag": "test-baidu1"
+    }
+}
 ```
 
 ## 📑 Headers 示例
