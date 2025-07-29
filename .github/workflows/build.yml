@@ -68,14 +68,23 @@ jobs:
         with:
           python-version: 3.11.3
 
-      - name: Upgrade pip
+      - name: Upgrade pip and tools
         run: pip install --upgrade pip setuptools wheel
 
       - name: Install maturin
         run: pip install maturin
 
-      - name: Build Rust Python extension (universal2 wheel)
-        run: maturin build --release --target universal2-apple-darwin --interpreter python3.11
+      # 构建 x86_64 独立 wheel
+      - name: Build Rust Python extension (x86_64 wheel)
+        run: maturin build --release --target x86_64-apple-darwin --interpreter python3.11
+
+      # 构建 arm64 独立 wheel
+      - name: Build Rust Python extension (arm64 wheel)
+        run: maturin build --release --target aarch64-apple-darwin --interpreter python3.11
+
+      # 如果你想合并成 universal2，可以用下面这步（可选）
+      # - name: Build Rust Python extension (universal2 wheel)
+      #   run: maturin build --release --target universal2-apple-darwin --interpreter python3.11
 
       - name: List generated wheel files
         run: ls -lh target/wheels/*.whl || echo "No wheel files found"
