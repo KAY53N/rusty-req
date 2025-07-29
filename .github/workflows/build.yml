@@ -32,7 +32,7 @@ jobs:
 
       - name: Build wheel
         run: |
-          maturin build --release --compatibility abi3 -o dist
+          maturin build --release -o dist
 
 
   build-macos:
