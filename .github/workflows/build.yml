@@ -20,6 +20,9 @@ jobs:
           manylinux: manylinux2014
           command: build
           args: --release --out dist
+        env:
+          RUST_BACKTRACE: 1
+          CARGO_TERM_COLOR: always
 
   build-macos:
     runs-on: macos-latest
