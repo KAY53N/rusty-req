@@ -21,7 +21,6 @@ Repository = "https://github.com/KAY53N/rusty-req"
 Documentation = "https://github.com/KAY53N/rusty-req#readme"
 
 [tool.maturin]
-python-source = false
 bindings = "pyo3"
 module-name = "rusty_req"
 compatibility = "manylinux2014"
