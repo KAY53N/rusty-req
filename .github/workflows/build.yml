@@ -64,13 +64,13 @@ jobs:
           python-version: 3.11.3
 
       - name: Upgrade pip
-        run: pip install --upgrade pip
+        run: pip install --upgrade pip setuptools wheel
 
       - name: Install maturin
         run: pip install maturin
 
-      - name: Build Rust Python extension
-        run: maturin build --release
+      - name: Build Rust Python extension (universal2 wheel)
+        run: maturin build --release --target universal2-apple-darwin --interpreter python3.11
 
       - name: List generated wheel files
         run: ls -lh target/wheels/*.whl || echo "No wheel files found"
@@ -80,6 +80,7 @@ jobs:
         with:
           name: wheels-macos
           path: target/wheels/*.whl
+
 
   build-windows:
     runs-on: windows-latest
