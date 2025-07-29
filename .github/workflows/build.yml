@@ -11,8 +11,6 @@ on:
 jobs:
   build-ubuntu:
     runs-on: ubuntu-latest
-    outputs:
-      wheel_name: ${{ steps.get-wheel.outputs.name }}
     steps:
       - uses: actions/checkout@v4
 
@@ -23,10 +21,10 @@ jobs:
           toolchain: stable
           override: true
 
-      - name: Setup Python
+      - name: Setup Python (最低版本)
         uses: actions/setup-python@v4
         with:
-          python-version: 3.12.10
+          python-version: "3.7"
 
       - name: Upgrade pip
         run: pip install --upgrade pip
@@ -34,8 +32,8 @@ jobs:
       - name: Install maturin
         run: pip install maturin
 
-      - name: Build Rust Python extension
-        run: maturin build --release
+      - name: Build Rust Python extension (Linux)
+        run: maturin build --release --abi --compatibility manylinux2014
 
       - name: List generated wheel files
         run: ls -lh target/wheels/*.whl || echo "No wheel files found"
@@ -58,10 +56,10 @@ jobs:
           toolchain: stable
           override: true
 
-      - name: Setup Python
+      - name: Setup Python (最低版本)
         uses: actions/setup-python@v4
         with:
-          python-version: 3.12.10
+          python-version: "3.7"
 
       - name: Upgrade pip
         run: pip install --upgrade pip
@@ -69,8 +67,8 @@ jobs:
       - name: Install maturin
         run: pip install maturin
 
-      - name: Build Rust Python extension
-        run: maturin build --release
+      - name: Build Rust Python extension (macOS)
+        run: maturin build --release --abi --compatibility universal2
 
       - name: List generated wheel files
         run: ls -lh target/wheels/*.whl || echo "No wheel files found"
@@ -94,10 +92,10 @@ jobs:
           override: true
           components: rust-analyzer, rust-src
 
-      - name: Setup Python
+      - name: Setup Python (最低版本)
         uses: actions/setup-python@v4
         with:
-          python-version: 3.12.10
+          python-version: "3.7"
 
       - name: Upgrade pip
         run: python -m pip install --upgrade pip
@@ -105,8 +103,8 @@ jobs:
       - name: Install maturin
         run: python -m pip install maturin
 
-      - name: Build Rust Python extension
-        run: python -m maturin build --release
+      - name: Build Rust Python extension (Windows)
+        run: python -m maturin build --release --abi
 
       - name: List generated wheel files
         run: |
@@ -115,7 +113,6 @@ jobs:
               $wheels | ForEach-Object { Write-Output "Found wheel: $_" }
           } else {
               Write-Output "No wheel files found in target\wheels"
-              # Check alternative location
               $altWheels = Get-ChildItem -Path "target\release\wheels\*.whl" -ErrorAction SilentlyContinue
               if ($altWheels) {
                   $altWheels | ForEach-Object { Write-Output "Found wheel in alternative location: $_" }
@@ -142,7 +139,7 @@ jobs:
       - name: Setup Python
         uses: actions/setup-python@v4
         with:
-          python-version: 3.12.10
+          python-version: "3.7"
 
       - name: Install maturin
         run: pip install maturin
