@@ -26,13 +26,14 @@ jobs:
           override: true
 
       - name: Install maturin
-        run: pip install maturin
-
-      - name: Build wheels
         run: |
-          for PYBIN in /opt/python/cp3{10,11,12}*/bin; do
-            "${PYBIN}/pip" wheel . -w wheelhouse/
-          done
+          pip install --upgrade pip
+          pip install maturin
+
+      - name: Build wheel
+        run: |
+          maturin build --release --compatibility abi3 -o dist
+
 
   build-macos:
     runs-on: macos-latest
