@@ -69,6 +69,11 @@ jobs:
           ${PYTHON_BIN}/pip install maturin==1.9.2
   
           ${PYTHON_BIN}/maturin build --release --manylinux 2_28 --interpreter ${PYTHON_BIN}/python
+      - name: Upload Linux wheels
+        uses: actions/upload-artifact@v4
+        with:
+          name: wheels-linux-py${{ matrix.python-version }}
+          path: target/wheels/*.whl
 
   build-macos:
     runs-on: macos-latest
