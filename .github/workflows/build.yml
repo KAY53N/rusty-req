@@ -56,20 +56,22 @@ jobs:
       - name: Install maturin and delocate
         run: pip install maturin delocate
 
-      - name: Build x86_64 binary
+      - name: Build x86_64 wheel
         run: |
+          mkdir -p target/wheels/x86_64
           maturin build --release --target x86_64-apple-darwin --interpreter python${{ matrix.python-version }}
-          mv target/wheels/*.whl target/wheels/x86_64.whl
+          mv target/wheels/*.whl target/wheels/x86_64/
 
-      - name: Build aarch64 binary
+      - name: Build aarch64 wheel
         run: |
+          mkdir -p target/wheels/aarch64
           maturin build --release --target aarch64-apple-darwin --interpreter python${{ matrix.python-version }}
-          mv target/wheels/*.whl target/wheels/aarch64.whl
+          mv target/wheels/*.whl target/wheels/aarch64/
 
       - name: Create universal2 wheel
         run: |
-          mkdir -p dist
-          delocate-fuse target/wheels/x86_64.whl target/wheels/aarch64.whl -w target/wheels/universal
+          mkdir -p target/wheels/universal
+          delocate-fuse target/wheels/x86_64/*.whl target/wheels/aarch64/*.whl -w target/wheels/universal
           mv target/wheels/universal/*.whl target/wheels/
 
       - uses: actions/upload-artifact@v4
