@@ -18,12 +18,10 @@ jobs:
       - uses: actions/checkout@v4
 
       - name: Set up Python ${{ matrix.python-version }}
-        run: |
-          /opt/python/cp${{ matrix.python-version | replace('.', '') }}-cp${{ matrix.python-version | replace('.', '') }}*/bin/pip install maturin
+        run: /opt/python/cp${{ matrix.python-version | replace('.', '') }}-cp${{ matrix.python-version | replace('.', '') }}*/bin/pip install maturin
 
       - name: Build wheel with maturin
-        run: |
-          /opt/python/cp${{ matrix.python-version | replace('.', '') }}-cp${{ matrix.python-version | replace('.', '') }}*/bin/maturin build --release --manylinux 2_28 --interpreter /opt/python/cp${{ matrix.python-version | replace('.', '') }}-cp${{ matrix.python-version | replace('.', '') }}*/bin/python
+        run: /opt/python/cp${{ matrix.python-version | replace('.', '') }}-cp${{ matrix.python-version | replace('.', '') }}*/bin/maturin build --release --manylinux 2_28 --interpreter /opt/python/cp${{ matrix.python-version | replace('.', '') }}-cp${{ matrix.python-version | replace('.', '') }}*/bin/python
 
       - uses: actions/upload-artifact@v4
         with:
