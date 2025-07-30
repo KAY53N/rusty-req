@@ -71,7 +71,10 @@ jobs:
       - name: Create universal2 wheel
         run: |
           mkdir -p target/wheels/universal
-          delocate-fuse target/wheels/x86_64/*.whl target/wheels/aarch64/*.whl -w target/wheels/universal
+          delocate-merge \
+            -w target/wheels/universal \
+            target/wheels/x86_64/*.whl \
+            target/wheels/aarch64/*.whl
           mv target/wheels/universal/*.whl target/wheels/
 
       - uses: actions/upload-artifact@v4
