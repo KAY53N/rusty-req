@@ -31,10 +31,16 @@ jobs:
           PYTHON_VERSION=${{ matrix.python-version }}
           PYTHON_TAG="cp${PYTHON_VERSION/./}-cp${PYTHON_VERSION/./}"
           
-          PYTHON_DIR=$(find /opt/python -maxdepth 1 -type d \( -name "${PYTHON_TAG}" -o -name "${PYTHON_TAG}-*" \) | head -n 1)
+          PYTHON_DIR=""
+          for dir in /opt/python/${PYTHON_TAG}*; do
+            if [[ -d "$dir" ]]; then
+              PYTHON_DIR="$dir"
+              break
+            fi
+          done
           
           if [[ -z "$PYTHON_DIR" ]]; then
-            echo "❌ 没找到解释器目录 /opt/python/${PYTHON_TAG} 或 ${PYTHON_TAG}-*"
+            echo "❌ 没找到解释器目录 /opt/python/${PYTHON_TAG}*"
             echo "📂 当前 /opt/python 中的内容："
             ls -1 /opt/python
             exit 1
