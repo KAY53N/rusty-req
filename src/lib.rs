@@ -15,7 +15,7 @@ use chrono::{DateTime, Local};
 use once_cell::sync::Lazy;
 use tokio::sync::Mutex;
 use std::sync::atomic::{AtomicBool, Ordering};
-use reqwest::header::{HeaderMap, HeaderName, HeaderValue, ACCEPT_ENCODING, CONNECTION};
+use reqwest::header::{HeaderMap, HeaderName, HeaderValue, ACCEPT_ENCODING};
 
 static DEBUG_MODE: AtomicBool = AtomicBool::new(false);
 
@@ -155,7 +155,6 @@ fn fetch_requests<'py>(
 
                     // 默认值
                     headers.insert(ACCEPT_ENCODING, HeaderValue::from_static("gzip, deflate, br"));
-                    // headers.insert(CONNECTION, HeaderValue::from_static("keep-alive"));
 
                     // 如果 Python 中传了 headers，就覆盖或追加
                     if let Some(py_headers) = &req.headers {
@@ -208,6 +207,7 @@ fn fetch_requests<'py>(
                             result.insert("exception".to_string(), Value::Object(exc).to_string());
                         } else {
                             // 状态码成功，返回响应文本
+                            result.insert("exception".to_string(), "{}".to_string());
                             result.insert("response".to_string(), text);
                         }
                     }
