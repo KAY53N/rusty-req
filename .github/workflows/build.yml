@@ -27,25 +27,25 @@ jobs:
         shell: bash
         run: |
           source $HOME/.cargo/env
-
+          
           PYTHON_VERSION=${{ matrix.python-version }}
           PYTHON_TAG="cp${PYTHON_VERSION/./}-cp${PYTHON_VERSION/./}"
-
-          PYTHON_DIR=$(find /opt/python -maxdepth 1 -type d -name "${PYTHON_TAG}-*" | head -n 1)
-
+          
+          PYTHON_DIR=$(find /opt/python -maxdepth 1 -type d \( -name "${PYTHON_TAG}" -o -name "${PYTHON_TAG}-*" \) | head -n 1)
+          
           if [[ -z "$PYTHON_DIR" ]]; then
-            echo "❌ 没找到解释器目录 /opt/python/${PYTHON_TAG}-*"
+            echo "❌ 没找到解释器目录 /opt/python/${PYTHON_TAG} 或 ${PYTHON_TAG}-*"
             echo "📂 当前 /opt/python 中的内容："
             ls -1 /opt/python
             exit 1
           fi
-
+          
           PYTHON_BIN="${PYTHON_DIR}/bin"
           echo "✅ 使用解释器路径: ${PYTHON_BIN}"
-
+          
           ${PYTHON_BIN}/pip install --upgrade pip
           ${PYTHON_BIN}/pip install maturin==1.9.2
-
+          
           ${PYTHON_BIN}/maturin build --release --manylinux 2_28 --interpreter ${PYTHON_BIN}/python
 
       - uses: actions/upload-artifact@v4
