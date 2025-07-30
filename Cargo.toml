@@ -2,7 +2,7 @@
 name = "rusty-req"
 version = "0.2.0"
 edition = "2021"
-license = "MIT"  # 这里必须明确指定
+license = "MIT"
 
 [dependencies]
 serde_json = "1.0"
