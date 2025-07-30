@@ -122,6 +122,10 @@ if __name__ == "__main__":
         "process_time": "0.2439",
         "request_time": "2025-07-29 19:17:11 -> 2025-07-29 19:17:11",
         "tag": "test-baidu1"
+    }，
+    "exception": {
+        "message": "HTTP status error: 500 - ", 
+        "type": "HttpStatusError"
     }
 }
 ```
