@@ -203,7 +203,7 @@ fn fetch_requests<'py>(
                             // 状态码非 2xx，视为错误，构造异常
                             let mut exc = serde_json::Map::new();
                             exc.insert("type".to_string(), Value::String("HttpStatusError".to_string()));
-                            exc.insert("message".to_string(), Value::String(format!("HTTP status error: {} - {}", status.as_u16(), text)));
+                            exc.insert("message".to_string(), Value::String(format!("HTTP status error: {}", status.as_u16())));
                             result.insert("exception".to_string(), Value::Object(exc).to_string());
                         } else {
                             // 状态码成功，返回响应文本

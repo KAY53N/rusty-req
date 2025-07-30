@@ -7,25 +7,27 @@ on:
     branches: [main]
 
 jobs:
-  build-ubuntu:
+  build-linux:
     runs-on: ubuntu-latest
     strategy:
       matrix:
         python-version: ["3.8", "3.9", "3.10", "3.11", "3.12"]
+    container:
+      image: quay.io/pypa/manylinux_2_28_x86_64
     steps:
       - uses: actions/checkout@v4
-      - uses: actions-rs/toolchain@v1
-        with:
-          toolchain: stable
-          override: true
-      - uses: actions/setup-python@v4
-        with:
-          python-version: ${{ matrix.python-version }}
-      - run: pip install maturin
-      - run: maturin build --release --interpreter python${{ matrix.python-version }}
+
+      - name: Set up Python ${{ matrix.python-version }}
+        run: |
+          /opt/python/cp${{ matrix.python-version | replace('.', '') }}-cp${{ matrix.python-version | replace('.', '') }}*/bin/pip install maturin
+
+      - name: Build wheel with maturin
+        run: |
+          /opt/python/cp${{ matrix.python-version | replace('.', '') }}-cp${{ matrix.python-version | replace('.', '') }}*/bin/maturin build --release --manylinux 2_28 --interpreter /opt/python/cp${{ matrix.python-version | replace('.', '') }}-cp${{ matrix.python-version | replace('.', '') }}*/bin/python
+
       - uses: actions/upload-artifact@v4
         with:
-          name: wheels-ubuntu-py${{ matrix.python-version }}
+          name: wheels-linux-py${{ matrix.python-version }}
           path: target/wheels/*.whl
 
   build-macos:
