@@ -70,6 +70,7 @@ jobs:
 
       - name: Create universal2 wheel
         run: |
+          pip install delocate
           mkdir -p target/wheels/universal
           delocate-merge \
             -w target/wheels/universal \
