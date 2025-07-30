@@ -27,19 +27,24 @@ jobs:
         shell: bash
         run: |
           source $HOME/.cargo/env
-  
-          # 生成 Python 解释器路径（如 cp311-cp311）
+
           PYTHON_VERSION=${{ matrix.python-version }}
-          PYTHON_TAG="cp${PYTHON_VERSION/./}"  # e.g. "3.11" -> "cp311"
-  
-          # 找到对应解释器的路径
-          PYTHON_DIR=$(find /opt/python -maxdepth 1 -type d -name "${PYTHON_TAG}-${PYTHON_TAG}" | head -n 1)
+          PYTHON_TAG="cp${PYTHON_VERSION/./}-cp${PYTHON_VERSION/./}"
+
+          PYTHON_DIR=$(find /opt/python -maxdepth 1 -type d -name "${PYTHON_TAG}")
+
+          if [[ -z "$PYTHON_DIR" ]]; then
+            echo "❌ 没找到 /opt/python/${PYTHON_TAG}，当前可用目录有："
+            ls -1 /opt/python
+            exit 1
+          fi
+
           PYTHON_BIN="${PYTHON_DIR}/bin"
-  
-          echo "Using Python from: ${PYTHON_BIN}"
-  
+          echo "✅ 使用解释器路径: ${PYTHON_BIN}"
+
+          ${PYTHON_BIN}/pip install --upgrade pip
           ${PYTHON_BIN}/pip install maturin==1.9.2
-  
+
           ${PYTHON_BIN}/maturin build --release --manylinux 2_28 --interpreter ${PYTHON_BIN}/python
 
       - uses: actions/upload-artifact@v4
