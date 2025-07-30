@@ -36,16 +36,42 @@ jobs:
         python-version: ["3.8", "3.9", "3.10", "3.11", "3.12"]
     steps:
       - uses: actions/checkout@v4
-      - uses: actions-rs/toolchain@v1
+
+      - name: Setup Rust
+        uses: actions-rs/toolchain@v1
         with:
           toolchain: stable
           override: true
-      - run: rustup target add universal2-apple-darwin
-      - uses: actions/setup-python@v4
+
+      - name: Add macOS targets
+        run: |
+          rustup target add x86_64-apple-darwin
+          rustup target add aarch64-apple-darwin
+
+      - name: Setup Python
+        uses: actions/setup-python@v4
         with:
           python-version: ${{ matrix.python-version }}
-      - run: pip install maturin
-      - run: maturin build --release --target universal2-apple-darwin --interpreter python${{ matrix.python-version }}
+
+      - name: Install maturin and delocate
+        run: pip install maturin delocate
+
+      - name: Build x86_64 binary
+        run: |
+          maturin build --release --target x86_64-apple-darwin --interpreter python${{ matrix.python-version }}
+          mv target/wheels/*.whl target/wheels/x86_64.whl
+
+      - name: Build aarch64 binary
+        run: |
+          maturin build --release --target aarch64-apple-darwin --interpreter python${{ matrix.python-version }}
+          mv target/wheels/*.whl target/wheels/aarch64.whl
+
+      - name: Create universal2 wheel
+        run: |
+          mkdir -p dist
+          delocate-fuse target/wheels/x86_64.whl target/wheels/aarch64.whl -w target/wheels/universal
+          mv target/wheels/universal/*.whl target/wheels/
+
       - uses: actions/upload-artifact@v4
         with:
           name: wheels-macos-py${{ matrix.python-version }}
@@ -70,23 +96,36 @@ jobs:
       - uses: actions/upload-artifact@v4
         with:
           name: wheels-windows-py${{ matrix.python-version }}
-          path: target/**/*.whl
+          path: target/wheels/*.whl
 
-  publish:  # 修改为简单的 publish 名称
+  publish:
     needs: [build-ubuntu, build-macos, build-windows]
     runs-on: ubuntu-latest
     if: github.ref == 'refs/heads/main' && github.event_name == 'push'
     steps:
       - uses: actions/checkout@v4
+
       - uses: actions/download-artifact@v4
         with:
           path: dist
           pattern: wheels-*
           merge-multiple: true
-      - run: find dist -name "*.whl" -exec mv {} dist/ \;
-      - uses: pypa/gh-action-pypi-publish@release/v1
+
+      - name: Collect all .whl files to final_dist
+        run: |
+          mkdir -p final_dist
+          find dist -type f -name "*.whl" -exec mv {} final_dist/ \;
+
+      - name: Check wheels with twine
+        run: |
+          pip install twine
+          twine check final_dist/*.whl
+
+      - name: Publish to PyPI
+        uses: pypa/gh-action-pypi-publish@release/v1
         with:
           user: __token__
           password: ${{ secrets.PYPI_API_TOKEN }}
           skip_existing: true
           verbose: true
+          packages_dir: final_dist
