@@ -17,9 +17,22 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: Check package manager
+        run: |
+          if command -v yum; then
+            echo "yum 可用"
+            yum --help
+          elif command -v dnf; then
+            echo "dnf 可用"
+            dnf --help
+          else
+            echo "无 yum 和 dnf"
+            exit 1
+          fi
+
       - name: Install system dependencies
         run: |
-          microdnf install -y openssl-devel pkg-config
+          dnf install -y openssl-devel pkgconfig
 
       - name: Install Rust
         run: |
