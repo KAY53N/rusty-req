@@ -2,194 +2,91 @@ name: Build and Publish Rust Python Extension
 
 on:
   push:
-    branches:
-      - main
+    branches: [main]
   pull_request:
-    branches:
-      - main
+    branches: [main]
 
 jobs:
   build-ubuntu:
     runs-on: ubuntu-latest
-    outputs:
-      wheel_name: ${{ steps.get-wheel.outputs.name }}
+    strategy:
+      matrix:
+        python-version: ["3.8", "3.9", "3.10", "3.11", "3.12"]
     steps:
       - uses: actions/checkout@v4
-
-      - name: Setup Rust
-        uses: actions-rs/toolchain@v1
+      - uses: actions-rs/toolchain@v1
         with:
-          profile: minimal
           toolchain: stable
           override: true
-
-      - name: Setup Python
-        uses: actions/setup-python@v4
+      - uses: actions/setup-python@v4
         with:
-          python-version: 3.11.3
-
-      - name: Upgrade pip
-        run: pip install --upgrade pip
-
-      - name: Install maturin
-        run: pip install maturin
-
-      - name: Build Rust Python extension
-        run: maturin build --release
-
-      - name: List generated wheel files
-        run: ls -lh target/wheels/*.whl || echo "No wheel files found"
-
-      - name: Upload wheels as artifact
-        uses: actions/upload-artifact@v4
+          python-version: ${{ matrix.python-version }}
+      - run: pip install maturin
+      - run: maturin build --release --interpreter python${{ matrix.python-version }}
+      - uses: actions/upload-artifact@v4
         with:
-          name: wheels-ubuntu
+          name: wheels-ubuntu-py${{ matrix.python-version }}
           path: target/wheels/*.whl
 
   build-macos:
     runs-on: macos-latest
+    continue-on-error: true
+    strategy:
+      matrix:
+        python-version: ["3.8", "3.9", "3.10", "3.11", "3.12"]
     steps:
       - uses: actions/checkout@v4
-
-      - name: Setup Rust
-        uses: actions-rs/toolchain@v1
+      - uses: actions-rs/toolchain@v1
         with:
-          profile: minimal
           toolchain: stable
           override: true
-
-      - name: Add macOS targets
-        run: |
-          rustup target add x86_64-apple-darwin
-          rustup target add aarch64-apple-darwin
-
-      - name: Setup Python
-        uses: actions/setup-python@v4
+      - run: rustup target add universal2-apple-darwin
+      - uses: actions/setup-python@v4
         with:
-          python-version: 3.11.3
-
-      - name: Upgrade pip and tools
-        run: pip install --upgrade pip setuptools wheel
-
-      - name: Install maturin
-        run: pip install maturin
-
-      # 构建 x86_64 独立 wheel
-      - name: Build Rust Python extension (x86_64 wheel)
-        run: maturin build --release --target x86_64-apple-darwin --interpreter python3.11
-
-      # 构建 arm64 独立 wheel
-      - name: Build Rust Python extension (arm64 wheel)
-        run: maturin build --release --target aarch64-apple-darwin --interpreter python3.11
-
-      # 如果你想合并成 universal2，可以用下面这步（可选）
-      # - name: Build Rust Python extension (universal2 wheel)
-      #   run: maturin build --release --target universal2-apple-darwin --interpreter python3.11
-
-      - name: List generated wheel files
-        run: ls -lh target/wheels/*.whl || echo "No wheel files found"
-
-      - name: Upload wheels as artifact
-        uses: actions/upload-artifact@v4
+          python-version: ${{ matrix.python-version }}
+      - run: pip install maturin
+      - run: maturin build --release --target universal2-apple-darwin --interpreter python${{ matrix.python-version }}
+      - uses: actions/upload-artifact@v4
         with:
-          name: wheels-macos
+          name: wheels-macos-py${{ matrix.python-version }}
           path: target/wheels/*.whl
 
   build-windows:
     runs-on: windows-latest
+    strategy:
+      matrix:
+        python-version: ["3.8", "3.9", "3.10", "3.11", "3.12"]
     steps:
       - uses: actions/checkout@v4
-
-      - name: Setup Rust
-        uses: actions-rs/toolchain@v1
+      - uses: actions-rs/toolchain@v1
         with:
-          profile: minimal
           toolchain: stable
           override: true
-          components: rust-analyzer, rust-src
-
-      - name: Setup Python
-        uses: actions/setup-python@v4
+      - uses: actions/setup-python@v4
         with:
-          python-version: 3.11.3
-
-      - name: Upgrade pip
-        run: python -m pip install --upgrade pip
-
-      - name: Install maturin
-        run: python -m pip install maturin
-
-      - name: Build Rust Python extension
-        run: python -m maturin build --release
-
-      - name: List generated wheel files
-        run: |
-          $wheels = Get-ChildItem -Path "target\wheels\*.whl" -ErrorAction SilentlyContinue
-          if ($wheels) {
-              $wheels | ForEach-Object { Write-Output "Found wheel: $_" }
-          } else {
-              Write-Output "No wheel files found in target\wheels"
-              # Check alternative location
-              $altWheels = Get-ChildItem -Path "target\release\wheels\*.whl" -ErrorAction SilentlyContinue
-              if ($altWheels) {
-                  $altWheels | ForEach-Object { Write-Output "Found wheel in alternative location: $_" }
-              } else {
-                  Write-Output "No wheel files found in target\release\wheels either"
-              }
-          }
-
-      - name: Upload wheels as artifact
-        uses: actions/upload-artifact@v4
+          python-version: ${{ matrix.python-version }}
+      - run: python -m pip install maturin
+      - run: python -m maturin build --release --interpreter python${{ matrix.python-version }}
+      - uses: actions/upload-artifact@v4
         with:
-          name: wheels-windows
-          path: |
-            target\wheels\*.whl
-            target\release\wheels\*.whl
+          name: wheels-windows-py${{ matrix.python-version }}
+          path: target/**/*.whl
 
-  publish-to-pypi:
+  publish:  # 修改为简单的 publish 名称
     needs: [build-ubuntu, build-macos, build-windows]
     runs-on: ubuntu-latest
     if: github.ref == 'refs/heads/main' && github.event_name == 'push'
     steps:
       - uses: actions/checkout@v4
-
-      - name: Setup Python
-        uses: actions/setup-python@v4
+      - uses: actions/download-artifact@v4
         with:
-          python-version: 3.11.3
-
-      - name: Install maturin
-        run: pip install maturin
-
-      - name: Download Ubuntu wheels
-        uses: actions/download-artifact@v4
+          path: dist
+          pattern: wheels-*
+          merge-multiple: true
+      - run: find dist -name "*.whl" -exec mv {} dist/ \;
+      - uses: pypa/gh-action-pypi-publish@release/v1
         with:
-          name: wheels-ubuntu
-          path: dist/
-
-      - name: Download macOS wheels
-        uses: actions/download-artifact@v4
-        with:
-          name: wheels-macos
-          path: dist/
-
-      - name: Download Windows wheels
-        uses: actions/download-artifact@v4
-        with:
-          name: wheels-windows
-          path: dist/
-
-      - name: Flatten wheel files
-        run: |
-          mkdir -p dist/flat
-          find dist -name '*.whl' -exec cp {} dist/flat/ \;
-          mv dist/flat/*.whl dist/ || true
-          rm -rf dist/flat
-
-      - name: List all wheels
-        run: ls -lh dist/*.whl || echo "No wheel files found"
-
-      - name: Upload all wheels to PyPI
-        env:
-          MATURIN_PYPI_TOKEN: ${{ secrets.PYPI_API_TOKEN }}
-        run: maturin upload --skip-existing dist/*.whl
+          user: __token__
+          password: ${{ secrets.PYPI_API_TOKEN }}
+          skip_existing: true
+          verbose: true
