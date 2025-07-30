@@ -7,9 +7,16 @@ name = "rusty-req"
 version = "0.2.0"
 description = "High-performance async HTTP client built with Rust for Python."
 readme = "README.md"
-license = "MIT"
-requires-python = ">=3.7"
-classifiers = [ "Programming Language :: Python", "Programming Language :: Python :: 3", "Programming Language :: Rust", "License :: OSI Approved :: MIT License", "Operating System :: OS Independent",]
+license = "MIT"  # ✅ 合法字段，没问题
+requires-python = ">=3.8"
+classifiers = [
+    "Programming Language :: Python",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Rust",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: OS Independent",
+]
+
 [[project.authors]]
 name = "KAY53N"
 email = "kaysen820@gmail.com"
