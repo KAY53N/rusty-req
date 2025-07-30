@@ -155,7 +155,7 @@ fn fetch_requests<'py>(
 
                     // 默认值
                     headers.insert(ACCEPT_ENCODING, HeaderValue::from_static("gzip, deflate, br"));
-                    headers.insert(CONNECTION, HeaderValue::from_static("keep-alive"));
+                    // headers.insert(CONNECTION, HeaderValue::from_static("keep-alive"));
 
                     // 如果 Python 中传了 headers，就覆盖或追加
                     if let Some(py_headers) = &req.headers {
