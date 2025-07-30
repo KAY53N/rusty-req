@@ -26,6 +26,7 @@ jobs:
       - name: Set up Python & Build Wheel
         shell: bash
         run: |
+          set -x  # 打印每条命令
           source $HOME/.cargo/env
           
           PYTHON_VERSION=${{ matrix.python-version }}
@@ -41,7 +42,6 @@ jobs:
           
           if [[ -z "$PYTHON_DIR" ]]; then
             echo "❌ 没找到解释器目录 /opt/python/${PYTHON_TAG}*"
-            echo "📂 当前 /opt/python 中的内容："
             ls -1 /opt/python
             exit 1
           fi
