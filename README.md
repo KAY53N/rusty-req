@@ -4,13 +4,13 @@
 
 ## 🔧 安装
 
-```bash
+```
 pip install rusty-req
 ```
 
 或从源码构建：
 
-```bash
+```
 maturin build --release
 pip install target/wheels/rusty_req-*.whl
 ```
