@@ -2,9 +2,8 @@ name: Build and Publish Rust Python Extension
 
 on:
   push:
-    branches: [main]
-  pull_request:
-    branches: [main]
+    tags:
+      - 'v*'   # 例如 v0.1.0、v1.2.3 等
 
 jobs:
   build-linux:
