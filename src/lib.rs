@@ -145,10 +145,17 @@ fn fetch_requests<'py>(
 
                 // 构建请求
                 let builder = Python::with_gil(|py| -> reqwest::RequestBuilder {
-                    let mut builder = client.request(
-                        req.method.as_deref().unwrap_or("POST").parse().unwrap(),
-                        &req.url
-                    );
+                    let method_str = req.method
+                        .as_deref()
+                        .unwrap_or("GET")
+                        .to_uppercase();
+
+                    let method = match method_str.parse::<reqwest::Method>() {
+                        Ok(m) => m,
+                        Err(_) => reqwest::Method::GET,
+                    };
+
+                    let mut builder = client.request(method.clone(), &req.url);
 
                     // 设置 Header
                     let mut headers = HeaderMap::new();
@@ -174,11 +181,24 @@ fn fetch_requests<'py>(
 
                     builder = builder.headers(headers);
 
-                    // 设置 body 参数
+                    // 设置参数：GET 用 query，POST/PUT/PATCH 用 JSON body
                     if let Some(params_dict) = &req.params {
                         if let Ok(dict) = params_dict.as_ref(py).downcast::<PyDict>() {
                             if let Ok(json_value) = py_to_json(py, dict) {
-                                builder = builder.json(&json_value);
+                                match method {
+                                    reqwest::Method::GET | reqwest::Method::DELETE => {
+                                        if let Some(obj) = json_value.as_object() {
+                                            let mut query_params = Vec::new();
+                                            for (k, v) in obj {
+                                                query_params.push((k.as_str(), v.to_string()));
+                                            }
+                                            builder = builder.query(&query_params);
+                                        }
+                                    }
+                                    _ => {
+                                        builder = builder.json(&json_value);
+                                    }
+                                }
                             }
                         }
                     }
@@ -193,31 +213,37 @@ fn fetch_requests<'py>(
                 match tokio::time::timeout(timeout, builder.send()).await {
                     Ok(Ok(res)) => {
                         let status = res.status();
-                        let headers = res.headers().clone();
+                        result.insert("http_status".to_string(), status.as_u16().to_string());  // ✅ 不管成功失败都插入
 
+                        let headers = res.headers().clone();
                         let text = res.text().await.unwrap_or_else(|e| format!("Failed to read response text: {}", e));
 
                         debug_log(&tag, &request_to_send, status, &headers, &text);
 
                         if !status.is_success() {
-                            // 状态码非 2xx，视为错误，构造异常
+                            // 状态码非 2xx，构造异常
                             let mut exc = serde_json::Map::new();
                             exc.insert("type".to_string(), Value::String("HttpStatusError".to_string()));
                             exc.insert("message".to_string(), Value::String(format!("HTTP status error: {}", status.as_u16())));
                             result.insert("exception".to_string(), Value::Object(exc).to_string());
                         } else {
-                            // 状态码成功，返回响应文本
                             result.insert("exception".to_string(), "{}".to_string());
                             result.insert("response".to_string(), text);
                         }
                     }
                     Ok(Err(e)) => {
+                        // 请求失败时也写个默认状态，常用 0 或 -1 表示无状态码
+                        result.insert("http_status".to_string(), "0".to_string());
+
                         let mut exc = serde_json::Map::new();
                         exc.insert("type".to_string(), Value::String("HttpError".to_string()));
                         exc.insert("message".to_string(), Value::String(format!("Request error: {}", e)));
                         result.insert("exception".to_string(), Value::Object(exc).to_string());
                     }
                     Err(_) => {
+                        // 超时同样插入状态码 0
+                        result.insert("http_status".to_string(), "0".to_string());
+
                         let err_msg = format!("Request timeout after {:.2} seconds", timeout.as_secs_f64());
                         let mut exc = serde_json::Map::new();
                         exc.insert("type".to_string(), Value::String("Timeout".to_string()));
@@ -252,6 +278,7 @@ fn fetch_requests<'py>(
                 // 超时则返回带错误信息的结构
                 requests.iter().map(|req| {
                     let mut res = HashMap::new();
+                    res.insert("http_status".to_string(), "0".to_string());
                     res.insert("response".to_string(), String::new());
                     let mut exc = serde_json::Map::new();
                     exc.insert("type".to_string(), Value::String("GlobalTimeout".to_string()));
@@ -270,27 +297,27 @@ fn fetch_requests<'py>(
             }
         };
 
-        // 转换为 Python 字典
+        // 转换为 Python 字典时，加入 http_status
         Python::with_gil(|py| {
             results.into_iter().map(|res| {
                 let dict = PyDict::new(py);
 
-                // 这里不调用 as_str()
                 dict.set_item("response", &res["response"])?;
 
-                // 这里用 get + map 保证安全，res.get("meta") -> Option<&String>
+                if let Some(http_status_str) = res.get("http_status") {
+                    if let Ok(http_status_int) = http_status_str.parse::<u16>() {
+                        dict.set_item("http_status", http_status_int)?;
+                    } else {
+                        dict.set_item("http_status", http_status_str)?;
+                    }
+                }
+
                 let meta_json_str = res.get("meta").map(|s| s.as_str()).unwrap_or("{}");
-
-                let meta_pyobj = py
-                    .import("json")?
-                    .call_method1("loads", (meta_json_str,))?;
-
+                let meta_pyobj = py.import("json")?.call_method1("loads", (meta_json_str,))?;
                 dict.set_item("meta", meta_pyobj)?;
 
                 if let Some(exc_str) = res.get("exception") {
-                    let exc_obj = py
-                        .import("json")?
-                        .call_method1("loads", (exc_str,))?;
+                    let exc_obj = py.import("json")?.call_method1("loads", (exc_str,))?;
                     dict.set_item("exception", exc_obj)?;
                 }
 
