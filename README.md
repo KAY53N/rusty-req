@@ -6,7 +6,7 @@
 
 ```bash
 pip install rusty-req
-
+```
 
 或从源码构建：
 
