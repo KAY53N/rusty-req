@@ -104,7 +104,7 @@ if __name__ == "__main__":
 
 ```
 
-## 🧱 数据结构说明
+## 🧱 Data Structure
 
 ### `RequestItem` Parameters
 
