@@ -9,7 +9,7 @@ use pyo3::IntoPy;
 use std::collections::HashMap;
 use reqwest::{Client, Request, StatusCode};
 use std::time::{Duration, SystemTime};
-use futures::future::{select_all, BoxFuture}; // 修改这里
+use futures::future::select_all;
 use serde_json::Value;
 use chrono::{DateTime, Local};
 use once_cell::sync::Lazy;
@@ -144,6 +144,172 @@ fn create_timeout_result(req: &RequestItem) -> HashMap<String, String> {
     }
     result.insert("meta".to_string(), Value::Object(meta).to_string());
     result
+}
+
+#[pyfunction]
+fn fetch_single<'py>(
+    py: Python<'py>,
+    url: String,
+    method: Option<String>,
+    params: Option<Py<PyDict>>,
+    timeout: Option<f64>,
+    headers: Option<Py<PyDict>>,
+    tag: Option<String>,
+) -> PyResult<&'py PyAny> {
+    pyo3_asyncio::tokio::future_into_py(py, async move {
+        let client = GLOBAL_CLIENT.lock().await.clone();
+        let mut result = HashMap::new();
+        result.insert("response".to_string(), String::new());
+
+        let start = SystemTime::now();
+
+        // 构建请求
+        let builder = Python::with_gil(|py| -> reqwest::RequestBuilder {
+            let method_str = method
+                .as_deref()
+                .unwrap_or("GET")
+                .to_uppercase();
+
+            let method = match method_str.parse::<reqwest::Method>() {
+                Ok(m) => m,
+                Err(_) => reqwest::Method::GET,
+            };
+
+            let mut builder = client.request(method.clone(), &url);
+
+            // 设置 Header
+            let mut headers_map = HeaderMap::new();
+
+            // 默认值
+            // headers_map.insert(ACCEPT_ENCODING, HeaderValue::from_static("gzip, deflate, br"));
+
+            // 如果传了 headers，就覆盖或追加
+            if let Some(py_headers) = &headers {
+                if let Ok(dict) = py_headers.as_ref(py).downcast::<PyDict>() {
+                    for (k, v) in dict.iter() {
+                        if let (Ok(k_str), Ok(v_str)) = (k.extract::<String>(), v.extract::<String>()) {
+                            if let (Ok(h_name), Ok(h_val)) = (
+                                HeaderName::from_bytes(k_str.as_bytes()),
+                                HeaderValue::from_str(&v_str),
+                            ) {
+                                headers_map.insert(h_name, h_val);
+                            }
+                        }
+                    }
+                }
+            }
+
+            builder = builder.headers(headers_map);
+
+            // 设置参数：GET 用 query，POST/PUT/PATCH 用 JSON body
+            if let Some(params_dict) = &params {
+                if let Ok(dict) = params_dict.as_ref(py).downcast::<PyDict>() {
+                    if let Ok(json_value) = py_to_json(py, dict) {
+                        match method {
+                            reqwest::Method::GET | reqwest::Method::DELETE => {
+                                if let Some(obj) = json_value.as_object() {
+                                    let mut query_params = Vec::new();
+                                    for (k, v) in obj {
+                                        query_params.push((k.as_str(), v.to_string()));
+                                    }
+                                    builder = builder.query(&query_params);
+                                }
+                            }
+                            _ => {
+                                builder = builder.json(&json_value);
+                            }
+                        }
+                    }
+                }
+            }
+
+            builder
+        });
+
+        // 发起请求
+        let request_timeout = Duration::from_secs_f64(timeout.unwrap_or(30.0).max(3.0));
+        let tag = tag.unwrap_or_else(|| "single-req".to_string());
+        let request_to_send = builder.try_clone().unwrap().build().unwrap();
+
+        match tokio::time::timeout(request_timeout, builder.send()).await {
+            Ok(Ok(res)) => {
+                let status = res.status();
+                result.insert("http_status".to_string(), status.as_u16().to_string());
+
+                let headers = res.headers().clone();
+                let text = res.text().await.unwrap_or_else(|e| format!("Failed to read response text: {}", e));
+
+                debug_log(&tag, &request_to_send, status, &headers, &text);
+
+                if !status.is_success() {
+                    // 状态码非 2xx，构造异常
+                    let mut exc = serde_json::Map::new();
+                    exc.insert("type".to_string(), Value::String("HttpStatusError".to_string()));
+                    exc.insert("message".to_string(), Value::String(format!("HTTP status error: {}", status.as_u16())));
+                    result.insert("exception".to_string(), Value::Object(exc).to_string());
+                } else {
+                    result.insert("exception".to_string(), "{}".to_string());
+                    result.insert("response".to_string(), text);
+                }
+            }
+            Ok(Err(e)) => {
+                result.insert("http_status".to_string(), "0".to_string());
+                let mut exc = serde_json::Map::new();
+                exc.insert("type".to_string(), Value::String("HttpError".to_string()));
+                exc.insert("message".to_string(), Value::String(format!("Request error: {}", e)));
+                result.insert("exception".to_string(), Value::Object(exc).to_string());
+            }
+            Err(_) => {
+                result.insert("http_status".to_string(), "0".to_string());
+                let err_msg = format!("Request timeout after {:.2} seconds", request_timeout.as_secs_f64());
+                let mut exc = serde_json::Map::new();
+                exc.insert("type".to_string(), Value::String("Timeout".to_string()));
+                exc.insert("message".to_string(), Value::String(err_msg));
+                result.insert("exception".to_string(), Value::Object(exc).to_string());
+            }
+        }
+
+        // 记录 meta 信息
+        let end = SystemTime::now();
+        let process_time = end.duration_since(start)
+            .unwrap_or(Duration::from_secs(0))
+            .as_secs_f64();
+        let start_str = format_datetime(start);
+        let end_str = format_datetime(end);
+
+        let mut meta = serde_json::Map::new();
+        meta.insert("request_time".to_string(), Value::String(format!("{} -> {}", start_str, end_str)));
+        meta.insert("process_time".to_string(), Value::String(format!("{:.4}", process_time)));
+        meta.insert("tag".to_string(), Value::String(tag));
+        result.insert("meta".to_string(), Value::Object(meta).to_string());
+
+        // 转换为 Python 字典 - 修复类型推断问题
+        Python::with_gil(|py| -> PyResult<Py<PyAny>> {
+            let dict = PyDict::new(py);
+
+            dict.set_item("response", &result["response"])?;
+
+            if let Some(http_status_str) = result.get("http_status") {
+                if let Ok(http_status_int) = http_status_str.parse::<u16>() {
+                    dict.set_item("http_status", http_status_int)?;
+                } else {
+                    dict.set_item("http_status", http_status_str)?;
+                }
+            }
+
+            let meta_json_str = result.get("meta").map(|s| s.as_str()).unwrap_or("{}");
+            let meta_pyobj = py.import("json")?.call_method1("loads", (meta_json_str,))?;
+            dict.set_item("meta", meta_pyobj)?;
+
+            if let Some(exc_str) = result.get("exception") {
+                let exc_obj = py.import("json")?.call_method1("loads", (exc_str,))?;
+                dict.set_item("exception", exc_obj)?;
+            }
+
+            // 明确指定返回类型
+            Ok(dict.into_py(py))
+        })
+    })
 }
 
 #[pyfunction]
@@ -369,6 +535,7 @@ fn format_datetime(time: SystemTime) -> String {
 fn rusty_req(_py: Python, m: &PyModule) -> PyResult<()> {
     m.add_class::<RequestItem>()?;
     m.add_function(wrap_pyfunction!(fetch_requests, m)?)?;
+    m.add_function(wrap_pyfunction!(fetch_single, m)?)?;
     m.add_function(wrap_pyfunction!(set_debug, m)?)?;
     Ok(())
 }
