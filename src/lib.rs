@@ -20,7 +20,7 @@ use std::pin::Pin;
 
 static DEBUG_MODE: AtomicBool = AtomicBool::new(false);
 
-const DEFAULT_USER_AGENT: &str = "Rust/1.88.0 (6b00bc388)";
+const DEFAULT_USER_AGENT: &str = "Rust/1.88.0 (6b00bc388) reqwest/0.11.27";
 
 // 全局共享的HTTP客户端
 static GLOBAL_CLIENT: Lazy<Mutex<Client>> = Lazy::new(|| {
