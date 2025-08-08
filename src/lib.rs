@@ -20,6 +20,8 @@ use std::pin::Pin;
 
 static DEBUG_MODE: AtomicBool = AtomicBool::new(false);
 
+const DEFAULT_USER_AGENT: &str = "Rust/1.88.0 (6b00bc388)";
+
 // 全局共享的HTTP客户端
 static GLOBAL_CLIENT: Lazy<Mutex<Client>> = Lazy::new(|| {
     Mutex::new(Client::builder()
@@ -27,6 +29,7 @@ static GLOBAL_CLIENT: Lazy<Mutex<Client>> = Lazy::new(|| {
         .gzip(true)       // 开启 gzip 自动解压
         .brotli(true)     // 开启 brotli 自动解压
         .deflate(true)    // 开启 deflate 自动解压
+        .user_agent(DEFAULT_USER_AGENT)// 传递user-agent
         .build()
         .expect("Failed to create HTTP client"))
 });
