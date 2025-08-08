@@ -9,7 +9,7 @@ use pyo3::IntoPy;
 use std::collections::HashMap;
 use reqwest::{Client, Request, StatusCode};
 use std::time::{Duration, SystemTime};
-use futures::future::select_all;
+use futures::future::{select_all, join_all};
 use serde_json::Value;
 use chrono::{DateTime, Local};
 use once_cell::sync::Lazy;
@@ -30,6 +30,41 @@ static GLOBAL_CLIENT: Lazy<Mutex<Client>> = Lazy::new(|| {
         .build()
         .expect("Failed to create HTTP client"))
 });
+
+// 新增：并发策略枚举
+#[pyclass]
+#[derive(Clone, PartialEq)]
+pub enum ConcurrencyMode {
+    #[pyo3(name = "SELECT_ALL")]
+    SelectAll,
+    #[pyo3(name = "JOIN_ALL")]
+    JoinAll,
+}
+
+#[pymethods]
+impl ConcurrencyMode {
+    #[new]
+    fn new() -> Self {
+        ConcurrencyMode::SelectAll
+    }
+
+    #[classattr]
+    const SELECT_ALL: ConcurrencyMode = ConcurrencyMode::SelectAll;
+
+    #[classattr]
+    const JOIN_ALL: ConcurrencyMode = ConcurrencyMode::JoinAll;
+
+    fn __str__(&self) -> String {
+        match self {
+            ConcurrencyMode::SelectAll => "SELECT_ALL".to_string(),
+            ConcurrencyMode::JoinAll => "JOIN_ALL".to_string(),
+        }
+    }
+
+    fn __repr__(&self) -> String {
+        format!("ConcurrencyMode.{}", self.__str__())
+    }
+}
 
 #[pyfunction]
 fn set_debug(enabled: bool) {
@@ -125,15 +160,15 @@ fn py_to_json(py: Python, obj: &PyAny) -> PyResult<Value> {
     }
 }
 
-// 创建超时的结果
-fn create_timeout_result(req: &RequestItem) -> HashMap<String, String> {
+// 创建全局超时的结果
+fn create_global_timeout_result(req: &RequestItem) -> HashMap<String, String> {
     let mut result = HashMap::new();
     result.insert("http_status".to_string(), "0".to_string());
     result.insert("response".to_string(), String::new());
 
     let mut exc = serde_json::Map::new();
     exc.insert("type".to_string(), Value::String("GlobalTimeout".to_string()));
-    exc.insert("message".to_string(), Value::String("Total operation timed out".to_string()));
+    exc.insert("message".to_string(), Value::String("Request timed out due to global timeout".to_string()));
     result.insert("exception".to_string(), Value::Object(exc).to_string());
 
     let mut meta = serde_json::Map::new();
@@ -144,6 +179,258 @@ fn create_timeout_result(req: &RequestItem) -> HashMap<String, String> {
     }
     result.insert("meta".to_string(), Value::Object(meta).to_string());
     result
+}
+
+// 提取单个请求执行逻辑
+async fn execute_single_request(
+    req: RequestItem,
+    client: Client
+) -> HashMap<String, String> {
+    let mut result = HashMap::new();
+    result.insert("response".to_string(), String::new());
+
+    let start = SystemTime::now();
+
+    // 构建请求
+    let builder = Python::with_gil(|py| -> reqwest::RequestBuilder {
+        let method_str = req.method
+            .as_deref()
+            .unwrap_or("GET")
+            .to_uppercase();
+
+        let method = method_str.parse::<reqwest::Method>().unwrap_or_else(|_| reqwest::Method::GET);
+
+        let mut builder = client.request(method.clone(), &req.url);
+
+        // 设置 Header
+        let mut headers = HeaderMap::new();
+
+        // 默认值
+        headers.insert(ACCEPT_ENCODING, HeaderValue::from_static("gzip, deflate, br"));
+
+        // 如果 Python 中传了 headers，就覆盖或追加
+        if let Some(py_headers) = &req.headers {
+            if let Ok(dict) = py_headers.as_ref(py).downcast::<PyDict>() {
+                for (k, v) in dict.iter() {
+                    if let (Ok(k_str), Ok(v_str)) = (k.extract::<String>(), v.extract::<String>()) {
+                        if let (Ok(h_name), Ok(h_val)) = (
+                            HeaderName::from_bytes(k_str.as_bytes()),
+                            HeaderValue::from_str(&v_str),
+                        ) {
+                            headers.insert(h_name, h_val);
+                        }
+                    }
+                }
+            }
+        }
+
+        builder = builder.headers(headers);
+
+        // 设置参数：GET 用 query，POST/PUT/PATCH 用 JSON body
+        if let Some(params_dict) = &req.params {
+            if let Ok(dict) = params_dict.as_ref(py).downcast::<PyDict>() {
+                if let Ok(json_value) = py_to_json(py, dict) {
+                    match method {
+                        reqwest::Method::GET | reqwest::Method::DELETE => {
+                            if let Some(obj) = json_value.as_object() {
+                                let mut query_params = Vec::new();
+                                for (k, v) in obj {
+                                    query_params.push((k.as_str(), v.to_string()));
+                                }
+                                builder = builder.query(&query_params);
+                            }
+                        }
+                        _ => {
+                            builder = builder.json(&json_value);
+                        }
+                    }
+                }
+            }
+        }
+
+        builder
+    });
+
+    // 发起请求，使用单个请求超时控制
+    let timeout = Duration::from_secs_f64(req.timeout.unwrap_or(30.0).max(3.0));
+    let tag = req.tag.clone().unwrap_or_else(|| "no-tag".to_string());
+    let request_to_send = builder.try_clone().unwrap().build().unwrap();
+
+    match tokio::time::timeout(timeout, builder.send()).await {
+        Ok(Ok(res)) => {
+            let status = res.status();
+            result.insert("http_status".to_string(), status.as_u16().to_string());
+
+            let headers = res.headers().clone();
+            let text = res.text().await.unwrap_or_else(|e| format!("Failed to read response text: {}", e));
+
+            debug_log(&tag, &request_to_send, status, &headers, &text);
+
+            if !status.is_success() {
+                // 状态码非 2xx，构造异常
+                let mut exc = serde_json::Map::new();
+                exc.insert("type".to_string(), Value::String("HttpStatusError".to_string()));
+                exc.insert("message".to_string(), Value::String(format!("HTTP status error: {}", status.as_u16())));
+                result.insert("exception".to_string(), Value::Object(exc).to_string());
+            } else {
+                result.insert("exception".to_string(), "{}".to_string());
+                result.insert("response".to_string(), text);
+            }
+        }
+        Ok(Err(e)) => {
+            result.insert("http_status".to_string(), "0".to_string());
+            let mut exc = serde_json::Map::new();
+            exc.insert("type".to_string(), Value::String("HttpError".to_string()));
+            exc.insert("message".to_string(), Value::String(format!("Request error: {}", e)));
+            result.insert("exception".to_string(), Value::Object(exc).to_string());
+        }
+        Err(_) => {
+            result.insert("http_status".to_string(), "0".to_string());
+            let err_msg = format!("Request timeout after {:.2} seconds", timeout.as_secs_f64());
+            let mut exc = serde_json::Map::new();
+            exc.insert("type".to_string(), Value::String("Timeout".to_string()));
+            exc.insert("message".to_string(), Value::String(err_msg));
+            result.insert("exception".to_string(), Value::Object(exc).to_string());
+        }
+    }
+
+    // 记录 meta 信息
+    let end = SystemTime::now();
+    let process_time = end.duration_since(start)
+        .unwrap_or(Duration::from_secs(0))
+        .as_secs_f64();
+    let start_str = format_datetime(start);
+    let end_str = format_datetime(end);
+
+    let mut meta = serde_json::Map::new();
+    meta.insert("request_time".to_string(), Value::String(format!("{} -> {}", start_str, end_str)));
+    meta.insert("process_time".to_string(), Value::String(format!("{:.4}", process_time)));
+    if let Some(tag) = req.tag.clone() {
+        meta.insert("tag".to_string(), Value::String(tag));
+    }
+    result.insert("meta".to_string(), Value::Object(meta).to_string());
+    result
+}
+
+// SELECT_ALL 模式实现 - 简化版本
+async fn execute_with_select_all(
+    requests: Vec<RequestItem>,
+    total_duration: Duration,
+    client: Client,
+) -> Vec<HashMap<String, String>> {
+    let total_requests = requests.len();
+    let mut results = vec![None; total_requests];
+
+    // 创建所有任务
+    let futures: Vec<_> = requests
+        .iter()
+        .enumerate()
+        .map(|(index, req)| {
+            let client = client.clone();
+            let req = req.clone();
+            Box::pin(async move {
+                let result = execute_single_request(req, client).await;
+                (index, result)
+            })
+        })
+        .collect();
+
+    // 使用 timeout 来控制总时间，同时使用 select_all 来收集结果
+    let collection_task = async {
+        let mut pending_futures = futures;
+
+        while !pending_futures.is_empty() {
+            let ((index, result), _completed_index, remaining) = select_all(pending_futures).await;
+            pending_futures = remaining;
+            results[index] = Some(result);
+        }
+    };
+
+    // 应用总超时
+    let _ = tokio::time::timeout(total_duration, collection_task).await;
+
+    // 为未完成的请求填充全局超时结果
+    for (i, result_slot) in results.iter_mut().enumerate() {
+        if result_slot.is_none() {
+            *result_slot = Some(create_global_timeout_result(&requests[i]));
+        }
+    }
+
+    // 将 Option 转换为实际结果
+    results.into_iter().map(|opt| opt.unwrap()).collect()
+}
+
+// JOIN_ALL 模式实现 - 修改版本（原子性操作）
+async fn execute_with_join_all(
+    requests: Vec<RequestItem>,
+    total_duration: Duration,
+    client: Client,
+) -> Vec<HashMap<String, String>> {
+    // 创建所有 futures
+    let request_futures: Vec<Pin<Box<dyn std::future::Future<Output = HashMap<String, String>> + Send>>> =
+        requests.iter().map(|req| {
+            let client = client.clone();
+            let req = req.clone();
+            Box::pin(async move {
+                execute_single_request(req, client).await
+            }) as Pin<Box<dyn std::future::Future<Output = HashMap<String, String>> + Send>>
+        }).collect();
+
+    // 使用 join_all 等待所有请求完成，带总超时控制
+    match tokio::time::timeout(total_duration, join_all(request_futures)).await {
+        Ok(completed_results) => {
+            // 检查是否所有请求都成功（即没有异常）
+            let all_success = completed_results.iter().all(|result| {
+                if let Some(exc_str) = result.get("exception") {
+                    exc_str == "{}" // 空的异常对象表示成功
+                } else {
+                    false
+                }
+            });
+
+            if all_success {
+                // 所有请求都成功，返回实际结果
+                completed_results
+            } else {
+                // 有请求失败，全部标记为全局超时
+                requests.iter().map(|req| create_global_timeout_result(req)).collect()
+            }
+        }
+        Err(_) => {
+            // 总超时，为所有请求创建全局超时结果
+            requests.iter().map(|req| create_global_timeout_result(req)).collect()
+        }
+    }
+}
+
+// 转换结果为Python对象
+fn convert_results_to_python(results: Vec<HashMap<String, String>>) -> PyResult<Vec<Py<PyAny>>> {
+    Python::with_gil(|py| {
+        results.into_iter().map(|res| {
+            let dict = PyDict::new(py);
+
+            dict.set_item("response", &res["response"])?;
+
+            if let Some(http_status_str) = res.get("http_status") {
+                if let Ok(http_status_int) = http_status_str.parse::<u16>() {
+                    dict.set_item("http_status", http_status_int)?;
+                } else {
+                    dict.set_item("http_status", http_status_str)?;
+                }
+            }
+
+            let meta_json_str = res.get("meta").map(|s| s.as_str()).unwrap_or("{}");
+            let meta_pyobj = py.import("json")?.call_method1("loads", (meta_json_str,))?;
+            dict.set_item("meta", meta_pyobj)?;
+
+            if let Some(exc_str) = res.get("exception") {
+                let exc_obj = py.import("json")?.call_method1("loads", (exc_str,))?;
+                dict.set_item("exception", exc_obj)?;
+            }
+
+            Ok(dict.into_py(py))
+        }).collect::<PyResult<Vec<Py<PyAny>>>>()
+    })
 }
 
 #[pyfunction]
@@ -179,9 +466,6 @@ fn fetch_single<'py>(
 
             // 设置 Header
             let mut headers_map = HeaderMap::new();
-
-            // 默认值
-            // headers_map.insert(ACCEPT_ENCODING, HeaderValue::from_static("gzip, deflate, br"));
 
             // 如果传了 headers，就覆盖或追加
             if let Some(py_headers) = &headers {
@@ -283,7 +567,7 @@ fn fetch_single<'py>(
         meta.insert("tag".to_string(), Value::String(tag));
         result.insert("meta".to_string(), Value::Object(meta).to_string());
 
-        // 转换为 Python 字典 - 修复类型推断问题
+        // 转换为 Python 字典
         Python::with_gil(|py| -> PyResult<Py<PyAny>> {
             let dict = PyDict::new(py);
 
@@ -306,7 +590,6 @@ fn fetch_single<'py>(
                 dict.set_item("exception", exc_obj)?;
             }
 
-            // 明确指定返回类型
             Ok(dict.into_py(py))
         })
     })
@@ -316,213 +599,25 @@ fn fetch_single<'py>(
 fn fetch_requests<'py>(
     py: Python<'py>,
     requests: Vec<RequestItem>,
-    total_timeout: Option<f64>
+    total_timeout: Option<f64>,
+    mode: Option<ConcurrencyMode>,  // 新增参数
 ) -> PyResult<&'py PyAny> {
     pyo3_asyncio::tokio::future_into_py(py, async move {
         let total_duration = Duration::from_secs_f64(total_timeout.unwrap_or(30.0));
+        let mode = mode.unwrap_or(ConcurrencyMode::SelectAll);
         let client = GLOBAL_CLIENT.lock().await.clone();
-        let total_requests = requests.len();
 
-        // 创建带索引的 futures
-        let request_futures: Vec<Pin<Box<dyn std::future::Future<Output = (usize, HashMap<String, String>)> + Send>>> =
-            requests.iter().enumerate().map(|(index, req)| {
-                let client = client.clone();
-                let req = req.clone();
-                Box::pin(async move {
-                    let mut result = HashMap::new();
-                    result.insert("response".to_string(), String::new());
-
-                    let start = SystemTime::now();
-
-                    // 构建请求
-                    let builder = Python::with_gil(|py| -> reqwest::RequestBuilder {
-                        let method_str = req.method
-                            .as_deref()
-                            .unwrap_or("GET")
-                            .to_uppercase();
-
-                        let method = match method_str.parse::<reqwest::Method>() {
-                            Ok(m) => m,
-                            Err(_) => reqwest::Method::GET,
-                        };
-
-                        let mut builder = client.request(method.clone(), &req.url);
-
-                        // 设置 Header
-                        let mut headers = HeaderMap::new();
-
-                        // 默认值
-                        headers.insert(ACCEPT_ENCODING, HeaderValue::from_static("gzip, deflate, br"));
-
-                        // 如果 Python 中传了 headers，就覆盖或追加
-                        if let Some(py_headers) = &req.headers {
-                            if let Ok(dict) = py_headers.as_ref(py).downcast::<PyDict>() {
-                                for (k, v) in dict.iter() {
-                                    if let (Ok(k_str), Ok(v_str)) = (k.extract::<String>(), v.extract::<String>()) {
-                                        if let (Ok(h_name), Ok(h_val)) = (
-                                            HeaderName::from_bytes(k_str.as_bytes()),
-                                            HeaderValue::from_str(&v_str),
-                                        ) {
-                                            headers.insert(h_name, h_val);
-                                        }
-                                    }
-                                }
-                            }
-                        }
-
-                        builder = builder.headers(headers);
-
-                        // 设置参数：GET 用 query，POST/PUT/PATCH 用 JSON body
-                        if let Some(params_dict) = &req.params {
-                            if let Ok(dict) = params_dict.as_ref(py).downcast::<PyDict>() {
-                                if let Ok(json_value) = py_to_json(py, dict) {
-                                    match method {
-                                        reqwest::Method::GET | reqwest::Method::DELETE => {
-                                            if let Some(obj) = json_value.as_object() {
-                                                let mut query_params = Vec::new();
-                                                for (k, v) in obj {
-                                                    query_params.push((k.as_str(), v.to_string()));
-                                                }
-                                                builder = builder.query(&query_params);
-                                            }
-                                        }
-                                        _ => {
-                                            builder = builder.json(&json_value);
-                                        }
-                                    }
-                                }
-                            }
-                        }
-
-                        builder
-                    });
-
-                    // 发起请求，使用单个请求超时控制
-                    let timeout = Duration::from_secs_f64(req.timeout.unwrap_or(3.0).max(3.0));
-                    let tag = req.tag.clone().unwrap_or_else(|| "no-tag".to_string());
-                    let request_to_send = builder.try_clone().unwrap().build().unwrap();
-                    match tokio::time::timeout(timeout, builder.send()).await {
-                        Ok(Ok(res)) => {
-                            let status = res.status();
-                            result.insert("http_status".to_string(), status.as_u16().to_string());
-
-                            let headers = res.headers().clone();
-                            let text = res.text().await.unwrap_or_else(|e| format!("Failed to read response text: {}", e));
-
-                            debug_log(&tag, &request_to_send, status, &headers, &text);
-
-                            if !status.is_success() {
-                                // 状态码非 2xx，构造异常
-                                let mut exc = serde_json::Map::new();
-                                exc.insert("type".to_string(), Value::String("HttpStatusError".to_string()));
-                                exc.insert("message".to_string(), Value::String(format!("HTTP status error: {}", status.as_u16())));
-                                result.insert("exception".to_string(), Value::Object(exc).to_string());
-                            } else {
-                                result.insert("exception".to_string(), "{}".to_string());
-                                result.insert("response".to_string(), text);
-                            }
-                        }
-                        Ok(Err(e)) => {
-                            result.insert("http_status".to_string(), "0".to_string());
-                            let mut exc = serde_json::Map::new();
-                            exc.insert("type".to_string(), Value::String("HttpError".to_string()));
-                            exc.insert("message".to_string(), Value::String(format!("Request error: {}", e)));
-                            result.insert("exception".to_string(), Value::Object(exc).to_string());
-                        }
-                        Err(_) => {
-                            result.insert("http_status".to_string(), "0".to_string());
-                            let err_msg = format!("Request timeout after {:.2} seconds", timeout.as_secs_f64());
-                            let mut exc = serde_json::Map::new();
-                            exc.insert("type".to_string(), Value::String("Timeout".to_string()));
-                            exc.insert("message".to_string(), Value::String(err_msg));
-                            result.insert("exception".to_string(), Value::Object(exc).to_string());
-                        }
-                    }
-
-                    // 记录 meta 信息
-                    let end = SystemTime::now();
-                    let process_time = end.duration_since(start)
-                        .unwrap_or(Duration::from_secs(0))
-                        .as_secs_f64();
-                    let start_str = format_datetime(start);
-                    let end_str = format_datetime(end);
-
-                    let mut meta = serde_json::Map::new();
-                    meta.insert("request_time".to_string(), Value::String(format!("{} -> {}", start_str, end_str)));
-                    meta.insert("process_time".to_string(), Value::String(format!("{:.4}", process_time)));
-                    if let Some(tag) = req.tag.clone() {
-                        meta.insert("tag".to_string(), Value::String(tag));
-                    }
-                    result.insert("meta".to_string(), Value::Object(meta).to_string());
-                    (index, result)
-                }) as Pin<Box<dyn std::future::Future<Output = (usize, HashMap<String, String>)> + Send>>
-            }).collect();
-
-        // 使用 select_all 处理并发请求，带总超时控制
-        let mut results = vec![None; total_requests];
-        let mut remaining_futures = request_futures;
-        let start_time = SystemTime::now();
-
-        while !remaining_futures.is_empty() {
-            let elapsed = start_time.elapsed().unwrap_or(Duration::from_secs(0));
-            if elapsed >= total_duration {
-                // 总超时时间到达，为未完成的请求创建超时结果
-                break;
+        let final_results = match mode {
+            ConcurrencyMode::SelectAll => {
+                execute_with_select_all(requests, total_duration, client).await
             }
-
-            let remaining_time = total_duration - elapsed;
-            match tokio::time::timeout(remaining_time, select_all(remaining_futures)).await {
-                Ok(((index, result), _completed_index, remaining)) => {
-                    // 有请求完成了
-                    results[index] = Some(result);
-                    remaining_futures = remaining;
-                }
-                Err(_) => {
-                    // 剩余时间超时
-                    break;
-                }
+            ConcurrencyMode::JoinAll => {
+                execute_with_join_all(requests, total_duration, client).await
             }
-        }
-
-        // 为未完成的请求填充超时结果
-        for (i, result_slot) in results.iter_mut().enumerate() {
-            if result_slot.is_none() {
-                *result_slot = Some(create_timeout_result(&requests[i]));
-            }
-        }
-
-        // 将 Option 转换为实际结果
-        let final_results: Vec<HashMap<String, String>> = results.into_iter()
-            .map(|opt| opt.unwrap())
-            .collect();
+        };
 
         // 转换为 Python 字典
-        Python::with_gil(|py| {
-            final_results.into_iter().map(|res| {
-                let dict = PyDict::new(py);
-
-                dict.set_item("response", &res["response"])?;
-
-                if let Some(http_status_str) = res.get("http_status") {
-                    if let Ok(http_status_int) = http_status_str.parse::<u16>() {
-                        dict.set_item("http_status", http_status_int)?;
-                    } else {
-                        dict.set_item("http_status", http_status_str)?;
-                    }
-                }
-
-                let meta_json_str = res.get("meta").map(|s| s.as_str()).unwrap_or("{}");
-                let meta_pyobj = py.import("json")?.call_method1("loads", (meta_json_str,))?;
-                dict.set_item("meta", meta_pyobj)?;
-
-                if let Some(exc_str) = res.get("exception") {
-                    let exc_obj = py.import("json")?.call_method1("loads", (exc_str,))?;
-                    dict.set_item("exception", exc_obj)?;
-                }
-
-                Ok(dict.into_py(py))
-            }).collect::<PyResult<Vec<Py<PyAny>>>>()
-        })
+        convert_results_to_python(final_results)
     })
 }
 
@@ -534,6 +629,7 @@ fn format_datetime(time: SystemTime) -> String {
 #[pymodule]
 fn rusty_req(_py: Python, m: &PyModule) -> PyResult<()> {
     m.add_class::<RequestItem>()?;
+    m.add_class::<ConcurrencyMode>()?;
     m.add_function(wrap_pyfunction!(fetch_requests, m)?)?;
     m.add_function(wrap_pyfunction!(fetch_single, m)?)?;
     m.add_function(wrap_pyfunction!(set_debug, m)?)?;
