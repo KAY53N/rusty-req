@@ -1,7 +1,5 @@
 # rusty-req
 
-# rusty-req
-
 [![PyPI Version](https://img.shields.io/pypi/v/rusty-req)](https://pypi.org/project/rusty-req/)
 [![GitHub Downloads](https://img.shields.io/github/downloads/KAY53N/rusty-req/total)](https://github.com/KAY53N/rusty-req/pkgs/container/rusty-req)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
