@@ -15,115 +15,47 @@ jobs:
       image: quay.io/pypa/manylinux_2_28_x86_64
     steps:
       - uses: actions/checkout@v4
-
-      - name: Check package manager
-        run: |
-          if command -v yum; then
-            echo "yum 可用"
-            yum --help
-          elif command -v dnf; then
-            echo "dnf 可用"
-            dnf --help
-          else
-            echo "无 yum 和 dnf"
-            exit 1
-          fi
-
       - name: Install system dependencies
-        run: |
-          dnf install -y openssl-devel pkgconfig
-
+        run: dnf install -y openssl-devel pkgconfig
       - name: Install Rust
         run: |
           curl https://sh.rustup.rs -sSf | sh -s -- -y
           source $HOME/.cargo/env
-          echo 'export PATH=$HOME/.cargo/bin:$PATH' >> ~/.bashrc
-
-      - name: Set up Python & Build Wheel
+      - name: Build Wheel
         shell: bash
         run: |
           source $HOME/.cargo/env
-  
-          PYTHON_VERSION=${{ matrix.python-version }}
-          PYTHON_TAG="cp${PYTHON_VERSION/./}-cp${PYTHON_VERSION/./}"
-  
-          PYTHON_DIR=""
-          for dir in /opt/python/${PYTHON_TAG}*; do
-            if [[ -d "$dir" ]]; then
-              PYTHON_DIR="$dir"
-              break
-            fi
-          done
-  
-          if [[ -z "$PYTHON_DIR" ]]; then
-            echo "❌ 没找到解释器目录 /opt/python/${PYTHON_TAG}*"
-            ls -1 /opt/python
-            exit 1
-          fi
-  
-          PYTHON_BIN="${PYTHON_DIR}/bin"
-          echo "✅ 使用解释器路径: ${PYTHON_BIN}"
-  
-          ${PYTHON_BIN}/pip install --upgrade pip
+          PYTHON_TAG="cp${ {matrix.python-version}/./}-cp${ {matrix.python-version}/./}"
+          PYTHON_BIN=$(find /opt/python/${PYTHON_TAG}*/bin -type d | head -1)
           ${PYTHON_BIN}/pip install maturin==1.9.2
-  
           ${PYTHON_BIN}/maturin build --release --manylinux 2_28 --interpreter ${PYTHON_BIN}/python
-      - name: Upload Linux wheels
-        uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v4
         with:
           name: wheels-linux-py${{ matrix.python-version }}
           path: target/wheels/*.whl
 
   build-macos:
     runs-on: macos-latest
-    continue-on-error: true
     strategy:
       matrix:
         python-version: ["3.9", "3.10", "3.11", "3.12", "3.13"]
     steps:
       - uses: actions/checkout@v4
-
-      - name: Setup Rust
-        uses: actions-rs/toolchain@v1
+      - uses: actions-rs/toolchain@v1
         with:
           toolchain: stable
           override: true
-
-      - name: Add macOS targets
-        run: |
-          rustup target add x86_64-apple-darwin
-          rustup target add aarch64-apple-darwin
-
-      - name: Setup Python
-        uses: actions/setup-python@v4
+      - name: Add targets
+        run: rustup target add x86_64-apple-darwin aarch64-apple-darwin
+      - uses: actions/setup-python@v4
         with:
           python-version: ${{ matrix.python-version }}
-
-      - name: Install maturin and delocate
-        run: pip install maturin delocate
-
-      - name: Build x86_64 wheel
+      - name: Install tools
+        run: pip install maturin==1.9.2 delocate
+      - name: Build universal wheel
         run: |
-          mkdir -p target/wheels/x86_64
-          maturin build --release --target x86_64-apple-darwin --interpreter python${{ matrix.python-version }}
-          mv target/wheels/*.whl target/wheels/x86_64/
-
-      - name: Build aarch64 wheel
-        run: |
-          mkdir -p target/wheels/aarch64
-          maturin build --release --target aarch64-apple-darwin --interpreter python${{ matrix.python-version }}
-          mv target/wheels/*.whl target/wheels/aarch64/
-
-      - name: Create universal2 wheel
-        run: |
-          pip install delocate
-          mkdir -p target/wheels/universal
-          delocate-merge \
-            -w target/wheels/universal \
-            target/wheels/x86_64/*.whl \
-            target/wheels/aarch64/*.whl
-          mv target/wheels/universal/*.whl target/wheels/
-
+          mkdir -p target/wheels
+          maturin build --release --universal2 --interpreter python
       - uses: actions/upload-artifact@v4
         with:
           name: wheels-macos-py${{ matrix.python-version }}
@@ -140,11 +72,20 @@ jobs:
         with:
           toolchain: stable
           override: true
+      - name: Clean workspace # 这个步骤可以保留，用于清理旧的构建产物
+        run: Remove-Item -Recurse -Force target,dist -ErrorAction SilentlyContinue
       - uses: actions/setup-python@v4
         with:
           python-version: ${{ matrix.python-version }}
-      - run: python -m pip install maturin
-      - run: python -m maturin build --release --interpreter python${{ matrix.python-version }}
+          architecture: x64
+      - name: Install maturin
+        run: pip install maturin==1.9.2
+
+      - name: Build wheel
+        run: |
+          $env:RUSTFLAGS="-C target-feature=+crt-static"
+          maturin build --release --interpreter python --out target/wheels
+
       - uses: actions/upload-artifact@v4
         with:
           name: wheels-windows-py${{ matrix.python-version }}
@@ -154,46 +95,28 @@ jobs:
     needs: [build-linux, build-macos, build-windows]
     runs-on: ubuntu-latest
     if: startsWith(github.ref, 'refs/tags/')
+    permissions:
+      id-token: write
     steps:
-      - name: Show GitHub context (for debugging)
-        run: |
-          echo "REF: ${{ github.ref }}"
-          echo "SHA: ${{ github.sha }}"
-          echo "ACTOR: ${{ github.actor }}"
-          echo "EVENT_NAME: ${{ github.event_name }}"
-          echo "WORKSPACE: ${{ github.workspace }}"
-          echo "REPOSITORY: ${{ github.repository }}"
-
       - uses: actions/checkout@v4
-
       - uses: actions/download-artifact@v4
         with:
           path: dist
           pattern: wheels-*
           merge-multiple: true
-
-      - name: Show downloaded artifacts
-        run: |
-          echo "=== dist 目录结构 ==="
-          ls -R dist || true
-
-      - name: Collect all .whl files to final_dist
+      - name: Prepare and Validate
         run: |
           mkdir -p final_dist
-          find dist -type f -name "*.whl" -exec mv {} final_dist/ \;
-          echo "=== final_dist 内容 ==="
-          ls -lh final_dist
-
-      - name: Check wheels with twine
-        run: |
+          find dist -name "*.whl" -exec cp {} final_dist/ \;
+          echo "--- Final files for publishing: ---"
+          ls -l final_dist/
           pip install twine
+          echo "--- Running twine check: ---"
           twine check final_dist/*.whl
-
       - name: Publish to PyPI
         uses: pypa/gh-action-pypi-publish@release/v1
         with:
+          skip-existing: true
+          packages-dir: final_dist
           user: __token__
           password: ${{ secrets.PYPI_API_TOKEN }}
-          skip_existing: true
-          verbose: true
-          packages_dir: final_dist
