@@ -25,10 +25,15 @@ jobs:
         shell: bash
         run: |
           source $HOME/.cargo/env
-          PYTHON_TAG="cp${{ matrix.python-version/./ }}-cp${{ matrix.python-version/./ }}"
+          # 先将GitHub Actions的变量赋值给一个shell变量
+          PY_VERSION="${{ matrix.python-version }}"
+          # 使用shell的参数扩展功能，将变量中的 '.' 全部移除
+          PY_VERSION_NODOT="${PY_VERSION//./}"
+          # 现在使用处理过的shell变量来构造tag
+          PYTHON_TAG="cp${PY_VERSION_NODOT}-cp${PY_VERSION_NODOT}"
           PYTHON_BIN=$(find /opt/python/${PYTHON_TAG}*/bin -type d | head -1)
+          # [保持修复] 升级 maturin
           ${PYTHON_BIN}/pip install "maturin>=1.5,<2.0"
-          # 输出到指定目录
           ${PYTHON_BIN}/maturin build --release --manylinux 2_28 --interpreter ${PYTHON_BIN}/python --out target/wheels
       - uses: actions/upload-artifact@v4
         with:
