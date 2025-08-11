@@ -95,8 +95,6 @@ jobs:
     needs: [build-linux, build-macos, build-windows]
     runs-on: ubuntu-latest
     if: startsWith(github.ref, 'refs/tags/')
-    permissions:
-      id-token: write
     steps:
       - uses: actions/checkout@v4
       - uses: actions/download-artifact@v4
@@ -104,19 +102,22 @@ jobs:
           path: dist
           pattern: wheels-*
           merge-multiple: true
-      - name: Prepare and Validate
+      - name: Prepare final distribution
         run: |
           mkdir -p final_dist
           find dist -name "*.whl" -exec cp {} final_dist/ \;
-          echo "--- Final files for publishing: ---"
-          ls -l final_dist/
-          pip install twine
-          echo "--- Running twine check: ---"
+      - name: Validate wheels
+        run: |
+          pip install twine wheel
+          for whl in final_dist/*.whl; do
+            python -m wheel unpack "$whl" --dest test_unpack || exit 1
+            rm -rf test_unpack
+          done
           twine check final_dist/*.whl
       - name: Publish to PyPI
         uses: pypa/gh-action-pypi-publish@release/v1
         with:
-          skip-existing: true
-          packages-dir: final_dist
           user: __token__
           password: ${{ secrets.PYPI_API_TOKEN }}
+          skip-existing: true
+          packages-dir: final_dist
