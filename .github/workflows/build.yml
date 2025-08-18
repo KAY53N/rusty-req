@@ -187,15 +187,18 @@ jobs:
           ls -R dist || true
 
       - name: Collect all wheels into final_dist
+        shell: bash
         run: |
           mkdir -p final_dist
-          cp dist/**/*.whl final_dist/ || true
+          # 用 find 避免 ** 不展开问题
+          find dist -type f -name "*.whl" -exec cp {} final_dist/ \;
           echo "=== final_dist 内容 ==="
           ls -lh final_dist
 
       - name: Check wheels with twine
+        shell: bash
         run: |
-          pip install twine
+          pip install --upgrade pip twine
           twine check final_dist/*.whl
 
       - name: Publish to PyPI
