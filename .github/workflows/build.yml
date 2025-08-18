@@ -136,16 +136,34 @@ jobs:
         python-version: ["3.9", "3.10", "3.11", "3.12", "3.13"]
     steps:
       - uses: actions/checkout@v4
-      - uses: actions-rs/toolchain@v1
+
+      - name: Setup Rust
+        uses: actions-rs/toolchain@v1
         with:
           toolchain: stable
           override: true
-      - uses: actions/setup-python@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v4
         with:
           python-version: ${{ matrix.python-version }}
-      - run: python -m pip install maturin
-      - run: python -m maturin build --release --interpreter python${{ matrix.python-version }}
-      - uses: actions/upload-artifact@v4
+
+      - name: Clean build dirs
+        shell: pwsh
+        run: |
+          Remove-Item -Recurse -Force target, dist, final_dist -ErrorAction Ignore
+
+      - name: Install maturin
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install maturin==1.9.2
+
+      - name: Build wheel
+        run: |
+          python -m maturin build --release --interpreter python${{ matrix.python-version }}
+
+      - name: Upload Windows wheels
+        uses: actions/upload-artifact@v4
         with:
           name: wheels-windows-py${{ matrix.python-version }}
           path: target/wheels/*.whl
