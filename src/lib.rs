@@ -9,7 +9,7 @@ use pyo3::IntoPy;
 use std::collections::HashMap;
 use reqwest::{Client, Request, StatusCode};
 use std::time::{Duration, SystemTime};
-use futures::future::{select_all, join_all};
+use futures::future::{join_all};
 use serde_json::Value;
 use chrono::{DateTime, Local};
 use once_cell::sync::Lazy;
@@ -17,6 +17,8 @@ use tokio::sync::Mutex;
 use std::sync::atomic::{AtomicBool, Ordering};
 use reqwest::header::{HeaderMap, HeaderName, HeaderValue, ACCEPT_ENCODING};
 use std::pin::Pin;
+use futures::stream::{FuturesUnordered};
+use futures::StreamExt;   // 这个必须单独引入
 
 static DEBUG_MODE: AtomicBool = AtomicBool::new(false);
 
@@ -315,7 +317,7 @@ async fn execute_single_request(
     result
 }
 
-// SELECT_ALL 模式实现 - 简化版本
+/// 执行一批请求，使用 `FuturesUnordered` 进行流式并发处理。
 async fn execute_with_select_all(
     requests: Vec<RequestItem>,
     total_duration: Duration,
@@ -325,26 +327,19 @@ async fn execute_with_select_all(
     let mut results = vec![None; total_requests];
 
     // 创建所有任务
-    let futures: Vec<_> = requests
-        .iter()
-        .enumerate()
-        .map(|(index, req)| {
-            let client = client.clone();
-            let req = req.clone();
-            Box::pin(async move {
-                let result = execute_single_request(req, client).await;
-                (index, result)
-            })
-        })
-        .collect();
+    let mut futures = FuturesUnordered::new();
+    for (index, req) in requests.iter().enumerate() {
+        let client = client.clone();
+        let req = req.clone();
+        futures.push(async move {
+            let result = execute_single_request(req, client).await;
+            (index, result)
+        });
+    }
 
-    // 使用 timeout 来控制总时间，同时使用 select_all 来收集结果
+    // 带总超时的流式处理
     let collection_task = async {
-        let mut pending_futures = futures;
-
-        while !pending_futures.is_empty() {
-            let ((index, result), _completed_index, remaining) = select_all(pending_futures).await;
-            pending_futures = remaining;
+        while let Some((index, result)) = futures.next().await {
             results[index] = Some(result);
         }
     };
@@ -359,7 +354,6 @@ async fn execute_with_select_all(
         }
     }
 
-    // 将 Option 转换为实际结果
     results.into_iter().map(|opt| opt.unwrap()).collect()
 }
 
