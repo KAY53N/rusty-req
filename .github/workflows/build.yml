@@ -170,6 +170,7 @@ jobs:
         with:
           name: debug-wheels
           path: target/wheels/*.whl
+          overwrite: true
 
   publish:
     needs: [build-linux, build-macos, build-windows]
