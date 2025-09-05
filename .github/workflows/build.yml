@@ -63,38 +63,38 @@ jobs:
           name: wheels-linux-py${{ matrix.python-version }}
           path: target/wheels/*.whl
 
-build-macos:
-  runs-on: macos-latest
-  strategy:
-    matrix:
-      python-version: ["3.9", "3.10", "3.11", "3.12", "3.13"]
-      target: ["x86_64-apple-darwin", "aarch64-apple-darwin"]  # 分别构建
-    max-parallel: 3
-  steps:
-    - uses: actions/checkout@v4
+  build-macos:
+    runs-on: macos-latest
+    strategy:
+      matrix:
+        python-version: ["3.9", "3.10", "3.11", "3.12", "3.13"]
+        target: ["x86_64-apple-darwin", "aarch64-apple-darwin"]  # 分别构建
+      max-parallel: 3
+    steps:
+      - uses: actions/checkout@v4
 
-    - name: Setup Rust
-      uses: dtolnay/rust-toolchain@stable
-      with:
-        targets: ${{ matrix.target }}
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
 
-    - name: Setup Python
-      uses: actions/setup-python@v4
-      with:
-        python-version: ${{ matrix.python-version }}
+      - name: Setup Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: ${{ matrix.python-version }}
 
-    - name: Install maturin
-      run: pip install maturin
+      - name: Install maturin
+        run: pip install maturin
 
-    - name: Build wheel
-      run: |
-        maturin build --release --target ${{ matrix.target }} --interpreter python
+      - name: Build wheel
+        run: |
+          maturin build --release --target ${{ matrix.target }} --interpreter python
 
-    - name: Upload macOS wheels
-      uses: actions/upload-artifact@v4
-      with:
-        name: wheels-macos-${{ matrix.target }}-py${{ matrix.python-version }}
-        path: target/wheels/*.whl
+      - name: Upload macOS wheels
+        uses: actions/upload-artifact@v4
+        with:
+          name: wheels-macos-${{ matrix.target }}-py${{ matrix.python-version }}
+          path: target/wheels/*.whl
 
   build-windows:
     runs-on: windows-latest
