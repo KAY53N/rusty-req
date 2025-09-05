@@ -151,19 +151,31 @@ jobs:
         with:
           python-version: ${{ matrix.python-version }}
 
-      - name: Clean build dirs
+      - name: Clean build directories
         shell: pwsh
         run: |
+          Write-Host "Cleaning target, dist, final_dist directories..."
           Remove-Item -Recurse -Force target, dist, final_dist -ErrorAction Ignore
 
-      - name: Install maturin
+      - name: Upgrade pip and install maturin
         run: |
           python -m pip install --upgrade pip
           python -m pip install maturin==1.9.2
 
       - name: Build wheel
         run: |
-          python -m maturin build --release --interpreter python${{ matrix.python-version }}
+          Write-Host "Building wheel for Python ${{ matrix.python-version }}..."
+          python -m maturin build --release --strip --interpreter python${{ matrix.python-version }}
+        shell: pwsh
+
+      - name: Verify wheel integrity
+        shell: pwsh
+        run: |
+          $wheels = Get-ChildItem -Path target\wheels\*.whl
+          foreach ($whl in $wheels) {
+            Write-Host "Checking $($whl.Name)..."
+            python -m zipfile -t $whl.FullName
+          }
 
       - name: Upload Windows wheels for debugging
         uses: actions/upload-artifact@v4
