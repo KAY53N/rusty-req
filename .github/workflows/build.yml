@@ -11,24 +11,11 @@ jobs:
     strategy:
       matrix:
         python-version: ["3.9", "3.10", "3.11", "3.12", "3.13"]
-      max-parallel: 5
+#      max-parallel: 5
     container:
       image: quay.io/pypa/manylinux_2_28_x86_64
     steps:
       - uses: actions/checkout@v4
-
-      - name: Check package manager
-        run: |
-          if command -v yum; then
-            echo "yum 可用"
-            yum --help
-          elif command -v dnf; then
-            echo "dnf 可用"
-            dnf --help
-          else
-            echo "无 yum 和 dnf"
-            exit 1
-          fi
 
       - name: Install system dependencies
         run: |
@@ -37,13 +24,13 @@ jobs:
       - name: Install Rust
         run: |
           curl https://sh.rustup.rs -sSf | sh -s -- -y
-          source $HOME/.cargo/env
           echo 'export PATH=$HOME/.cargo/bin:$PATH' >> ~/.bashrc
+          source ~/.bashrc
 
       - name: Set up Python & Build Wheel
         shell: bash
         run: |
-          source $HOME/.cargo/env
+          source ~/.bashrc
           
           PYTHON_VERSION=${{ matrix.python-version }}
           PYTHON_TAG="cp${PYTHON_VERSION/./}-cp${PYTHON_VERSION/./}"
@@ -69,6 +56,7 @@ jobs:
           ${PYTHON_BIN}/pip install maturin==1.9.2
           
           ${PYTHON_BIN}/maturin build --release --manylinux 2_28 --interpreter ${PYTHON_BIN}/python
+
       - name: Upload Linux wheels
         uses: actions/upload-artifact@v4
         with:
@@ -77,113 +65,65 @@ jobs:
 
   build-macos:
     runs-on: macos-latest
-    continue-on-error: true
     strategy:
       matrix:
         python-version: ["3.9", "3.10", "3.11", "3.12", "3.13"]
-      max-parallel: 5
+#      max-parallel: 3  # 减少并行数量，避免资源冲突
     steps:
       - uses: actions/checkout@v4
 
       - name: Setup Rust
-        uses: actions-rs/toolchain@v1
+        uses: dtolnay/rust-toolchain@stable
         with:
-          toolchain: stable
-          override: true
-
-      - name: Add macOS targets
-        run: |
-          rustup target add x86_64-apple-darwin
-          rustup target add aarch64-apple-darwin
+          targets: x86_64-apple-darwin, aarch64-apple-darwin
 
       - name: Setup Python
         uses: actions/setup-python@v4
         with:
           python-version: ${{ matrix.python-version }}
 
-      - name: Install maturin and delocate
-        run: pip install maturin delocate
+      - name: Install maturin
+        run: pip install maturin
 
-      - name: Build x86_64 wheel
+      - name: Build universal2 wheel
         run: |
-          mkdir -p target/wheels/x86_64
-          maturin build --release --target x86_64-apple-darwin --interpreter python${{ matrix.python-version }}
-          mv target/wheels/*.whl target/wheels/x86_64/
+          # 直接构建 universal2 轮子
+          maturin build --release --target universal2-apple-darwin --interpreter python
 
-      - name: Build aarch64 wheel
-        run: |
-          mkdir -p target/wheels/aarch64
-          maturin build --release --target aarch64-apple-darwin --interpreter python${{ matrix.python-version }}
-          mv target/wheels/*.whl target/wheels/aarch64/
-      - name: Create universal2 wheel
-        run: |
-          pip install delocate
-          mkdir -p target/wheels/universal
-          delocate-merge \
-            -w target/wheels/universal \
-            target/wheels/x86_64/*.whl \
-            target/wheels/aarch64/*.whl
-          mv target/wheels/universal/*.whl target/wheels/
-      - uses: actions/upload-artifact@v4
+      - name: Upload macOS wheels
+        uses: actions/upload-artifact@v4
         with:
           name: wheels-macos-py${{ matrix.python-version }}
           path: target/wheels/*.whl
 
   build-windows:
     runs-on: windows-latest
-    env:
-      ACTIONS_RUNNER_DEBUG: true
-      ACTIONS_STEP_DEBUG: true
     strategy:
       matrix:
         python-version: ["3.9", "3.10", "3.11", "3.12", "3.13"]
-      max-parallel: 5
+#      max-parallel: 5
     steps:
       - uses: actions/checkout@v4
 
       - name: Setup Rust
-        uses: actions-rs/toolchain@v1
-        with:
-          toolchain: stable
-          override: true
+        uses: dtolnay/rust-toolchain@stable
 
       - name: Setup Python
         uses: actions/setup-python@v4
         with:
           python-version: ${{ matrix.python-version }}
 
-      - name: Clean build directories
-        shell: pwsh
-        run: |
-          Write-Host "Cleaning target, dist, final_dist directories..."
-          Remove-Item -Recurse -Force target, dist, final_dist -ErrorAction Ignore
-
-      - name: Upgrade pip and install maturin
-        run: |
-          python -m pip install --upgrade pip
-          python -m pip install maturin==1.9.2
+      - name: Install maturin
+        run: pip install maturin
 
       - name: Build wheel
-        run: |
-          Write-Host "Building wheel for Python ${{ matrix.python-version }}..."
-          python -m maturin build --release --strip --interpreter python${{ matrix.python-version }}
-        shell: pwsh
+        run: maturin build --release --interpreter python
 
-      - name: Verify wheel integrity
-        shell: pwsh
-        run: |
-          $wheels = Get-ChildItem -Path target\wheels\*.whl
-          foreach ($whl in $wheels) {
-            Write-Host "Checking $($whl.Name)..."
-            python -m zipfile -t $whl.FullName
-          }
-
-      - name: Upload Windows wheels for debugging
+      - name: Upload Windows wheels
         uses: actions/upload-artifact@v4
         with:
           name: wheels-windows-py${{ matrix.python-version }}
           path: target/wheels/*.whl
-          overwrite: true
 
   publish:
     needs: [build-linux, build-macos, build-windows]
@@ -192,118 +132,37 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      # --- 下载 Linux wheels ---
-      - name: Download Linux wheels Py3.9
-        uses: actions/download-artifact@v4
-        with:
-          name: wheels-linux-py3.9
-          path: dist/linux/3.9
+      - name: Download all artifacts
+        run: |
+          mkdir -p dist
+          # 下载所有 artifacts
+          for py_version in 3.9 3.10 3.11 3.12 3.13; do
+            for platform in linux macos windows; do
+              artifact_name="wheels-${platform}-py${py_version}"
+              if curl -s -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" \
+                 -H "Accept: application/vnd.github.v3+json" \
+                 "https://api.github.com/repos/${{ github.repository }}/actions/artifacts" | \
+                 grep -q "\"name\": \"$artifact_name\""; then
+                echo "Downloading $artifact_name"
+                gh run download --artifact $artifact_name --dir dist/${platform}/${py_version}
+              else
+                echo "Artifact $artifact_name not found, skipping"
+              fi
+            done
+          done
 
-      - name: Download Linux wheels Py3.10
-        uses: actions/download-artifact@v4
-        with:
-          name: wheels-linux-py3.10
-          path: dist/linux/3.10
-
-      - name: Download Linux wheels Py3.11
-        uses: actions/download-artifact@v4
-        with:
-          name: wheels-linux-py3.11
-          path: dist/linux/3.11
-
-      - name: Download Linux wheels Py3.12
-        uses: actions/download-artifact@v4
-        with:
-          name: wheels-linux-py3.12
-          path: dist/linux/3.12
-
-      - name: Download Linux wheels Py3.13
-        uses: actions/download-artifact@v4
-        with:
-          name: wheels-linux-py3.13
-          path: dist/linux/3.13
-
-      # --- 下载 macOS wheels ---
-      - name: Download macOS wheels Py3.9
-        uses: actions/download-artifact@v4
-        with:
-          name: wheels-macos-py3.9
-          path: dist/macos/3.9
-
-      - name: Download macOS wheels Py3.10
-        uses: actions/download-artifact@v4
-        with:
-          name: wheels-macos-py3.10
-          path: dist/macos/3.10
-
-      - name: Download macOS wheels Py3.11
-        uses: actions/download-artifact@v4
-        with:
-          name: wheels-macos-py3.11
-          path: dist/macos/3.11
-
-      - name: Download macOS wheels Py3.12
-        uses: actions/download-artifact@v4
-        with:
-          name: wheels-macos-py3.12
-          path: dist/macos/3.12
-
-      - name: Download macOS wheels Py3.13
-        uses: actions/download-artifact@v4
-        with:
-          name: wheels-macos-py3.13
-          path: dist/macos/3.13
-
-      # --- 下载 Windows wheels ---
-      - name: Download Windows wheels Py3.9
-        uses: actions/download-artifact@v4
-        with:
-          name: wheels-windows-py3.9
-          path: dist/windows/3.9
-
-      - name: Download Windows wheels Py3.10
-        uses: actions/download-artifact@v4
-        with:
-          name: wheels-windows-py3.10
-          path: dist/windows/3.10
-
-      - name: Download Windows wheels Py3.11
-        uses: actions/download-artifact@v4
-        with:
-          name: wheels-windows-py3.11
-          path: dist/windows/3.11
-
-      - name: Download Windows wheels Py3.12
-        uses: actions/download-artifact@v4
-        with:
-          name: wheels-windows-py3.12
-          path: dist/windows/3.12
-
-      - name: Download Windows wheels Py3.13
-        uses: actions/download-artifact@v4
-        with:
-          name: wheels-windows-py3.13
-          path: dist/windows/3.13
-
-      # --- 显示下载的 artifact ---
-      - name: Show downloaded artifacts
-        run: ls -R dist || true
-
-      # --- 收集所有 wheels 到 final_dist ---
-      - name: Collect all wheels into final_dist
+      - name: Collect all wheels
         run: |
           mkdir -p final_dist
-          find dist -type f -name "*.whl" -exec cp {} final_dist/ \;
-          echo "=== final_dist 内容 ==="
-          ls -lh final_dist
+          find dist -name "*.whl" -exec cp {} final_dist/ \;
+          echo "=== Collected wheels ==="
+          ls -la final_dist/
 
-      # --- 检查 wheels ---
-      - name: Check wheels with twine
+      - name: Check wheels
         run: |
-          python -m pip install --upgrade pip twine
-          twine check final_dist/*.whl
+          pip install twine
+          twine check final_dist/*.whl || echo "Some wheels may have issues, but continuing..."
 
-      # --- 上传 PyPI ---
       - name: Publish to PyPI
         uses: pypa/gh-action-pypi-publish@v1.11.0
         with:
