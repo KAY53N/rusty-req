@@ -116,15 +116,15 @@ jobs:
           maturin build --release --target aarch64-apple-darwin --interpreter python${{ matrix.python-version }}
           mv target/wheels/*.whl target/wheels/aarch64/
 
-      - name: Create universal2 wheel
-        run: |
-          pip install delocate
-          mkdir -p target/wheels/universal
-          delocate-merge \
-            -w target/wheels/universal \
-            target/wheels/x86_64/*.whl \
-            target/wheels/aarch64/*.whl
-          mv target/wheels/universal/*.whl target/wheels/
+#      - name: Create universal2 wheel
+#        run: |
+#          pip install delocate
+#          mkdir -p target/wheels/universal
+#          delocate-merge \
+#            -w target/wheels/universal \
+#            target/wheels/x86_64/*.whl \
+#            target/wheels/aarch64/*.whl
+#          mv target/wheels/universal/*.whl target/wheels/
 
       - uses: actions/upload-artifact@v4
         with:
