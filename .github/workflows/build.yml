@@ -183,7 +183,7 @@ jobs:
       - name: Upload Windows wheels for debugging
         uses: actions/upload-artifact@v4
         with:
-          name: wheels-windows-py${{ matrix.python-version }}-${{ github.run_id }}
+          name: wheels-windows-py${{ matrix.python-version }}
           path: target/wheels/*.whl
           overwrite: true
 
@@ -194,22 +194,10 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Download all Linux wheels
+      - name: Download all wheels
         uses: actions/download-artifact@v4
         with:
-          name: wheels-linux-py*
-          path: dist
-
-      - name: Download all macOS wheels
-        uses: actions/download-artifact@v4
-        with:
-          name: wheels-macos-py*
-          path: dist
-
-      - name: Download all Windows wheels
-        uses: actions/download-artifact@v4
-        with:
-          name: wheels-windows-py*
+          name: wheels-*
           path: dist
 
       - name: Show downloaded artifacts
@@ -235,3 +223,4 @@ jobs:
           packages-dir: final_dist
           skip-existing: true
           verbose: true
+
