@@ -132,36 +132,39 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Download all artifacts
-        run: |
-          mkdir -p dist
-          # 下载所有 artifacts
-          for py_version in 3.9 3.10 3.11 3.12 3.13; do
-            for platform in linux macos windows; do
-              artifact_name="wheels-${platform}-py${py_version}"
-              if curl -s -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" \
-                 -H "Accept: application/vnd.github.v3+json" \
-                 "https://api.github.com/repos/${{ github.repository }}/actions/artifacts" | \
-                 grep -q "\"name\": \"$artifact_name\""; then
-                echo "Downloading $artifact_name"
-                gh run download --artifact $artifact_name --dir dist/${platform}/${py_version}
-              else
-                echo "Artifact $artifact_name not found, skipping"
-              fi
-            done
-          done
+      # 下载所有 artifacts
+      - name: Download Linux artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: dist/linux
+          pattern: wheels-linux-*
+          merge-multiple: true
+
+      - name: Download macOS artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: dist/macos
+          pattern: wheels-macos-*
+          merge-multiple: true
+
+      - name: Download Windows artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: dist/windows
+          pattern: wheels-windows-*
+          merge-multiple: true
 
       - name: Collect all wheels
         run: |
           mkdir -p final_dist
           find dist -name "*.whl" -exec cp {} final_dist/ \;
-          echo "=== Collected wheels ==="
+          echo "收集到的 wheel 文件:"
           ls -la final_dist/
 
       - name: Check wheels
         run: |
           pip install twine
-          twine check final_dist/*.whl || echo "Some wheels may have issues, but continuing..."
+          twine check final_dist/*.whl || echo "检查失败但继续..."
 
       - name: Publish to PyPI
         uses: pypa/gh-action-pypi-publish@v1.11.0
