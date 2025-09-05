@@ -194,20 +194,28 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Download all wheels
+      - name: Download all Linux wheels
         uses: actions/download-artifact@v4
         with:
+          name: wheels-linux-py*
           path: dist
-          pattern: wheels-*
-          merge-multiple: true
+
+      - name: Download all macOS wheels
+        uses: actions/download-artifact@v4
+        with:
+          name: wheels-macos-py*
+          path: dist
+
+      - name: Download all Windows wheels
+        uses: actions/download-artifact@v4
+        with:
+          name: wheels-windows-py*
+          path: dist
 
       - name: Show downloaded artifacts
-        run: |
-          echo "=== dist 目录结构 ==="
-          ls -R dist || true
+        run: ls -R dist || true
 
       - name: Collect all wheels into final_dist
-        shell: bash
         run: |
           mkdir -p final_dist
           find dist -type f -name "*.whl" -exec cp {} final_dist/ \;
@@ -215,16 +223,15 @@ jobs:
           ls -lh final_dist
 
       - name: Check wheels with twine
-        shell: bash
         run: |
-          pip install --upgrade pip twine
+          python -m pip install --upgrade pip twine
           twine check final_dist/*.whl
 
       - name: Publish to PyPI
-        uses: pypa/gh-action-pypi-publish@release/v1
+        uses: pypa/gh-action-pypi-publish@v1.11.0
         with:
           user: __token__
           password: ${{ secrets.PYPI_API_TOKEN }}
-          skip-existing: true
           packages-dir: final_dist
+          skip-existing: true
           verbose: true
