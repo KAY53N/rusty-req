@@ -11,6 +11,7 @@ jobs:
     strategy:
       matrix:
         python-version: ["3.9", "3.10", "3.11", "3.12", "3.13"]
+      max-parallel: 2
     container:
       image: quay.io/pypa/manylinux_2_28_x86_64
     steps:
@@ -80,6 +81,7 @@ jobs:
     strategy:
       matrix:
         python-version: ["3.9", "3.10", "3.11", "3.12", "3.13"]
+      max-parallel: 2
     steps:
       - uses: actions/checkout@v4
 
@@ -137,6 +139,7 @@ jobs:
     strategy:
       matrix:
         python-version: ["3.9", "3.10", "3.11", "3.12", "3.13"]
+      max-parallel: 2
     steps:
       - uses: actions/checkout@v4
 
@@ -180,7 +183,7 @@ jobs:
       - name: Upload Windows wheels for debugging
         uses: actions/upload-artifact@v4
         with:
-          name: wheels-windows-py${{ matrix.python-version }}
+          name: wheels-windows-py${{ matrix.python-version }}-${{ github.run_id }}
           path: target/wheels/*.whl
           overwrite: true
 
