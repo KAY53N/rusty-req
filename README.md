@@ -6,6 +6,10 @@
 
 A high-performance asynchronous request library based on Rust and Python, suitable for scenarios that require high-throughput concurrent HTTP requests. It implements the core concurrent logic in Rust and packages it into a Python module using [PyO3](https://pyo3.rs/) and [maturin](https://github.com/PyO3/maturin), combining Rust's performance with Python's ease of use.
 
+---
+
+### 🌐 [English](README.md) | [中文](README_zh.md)
+
 ## 🚀 Features
 
 -   **Dual Request Modes**: Supports both batch concurrent requests (`fetch_requests`) and single asynchronous requests (`fetch_single`).
@@ -138,6 +142,24 @@ The `fetch_requests` function supports two powerful concurrency strategies. Choo
     -   It then inspects the results.
     -   **Success Case**: Only if *every single request was successful* will it return the complete list of successful results.
     -   **Failure Case**: If *even one request fails* for any reason (e.g., its individual timeout, a network error, or a non-2xx status code), this mode will discard all results and return a list where **every request is marked as a global failure.**
+
+### 4. Timeout Performance Comparison
+
+Under the same test conditions (global timeout 3s, per-request timeout 2.6s, httpbin delay 2.3s), we compared the performance of different libraries:
+
+| Library / Framework | Total Requests | Successful | Timed Out | Success Rate | Actual Total Time | Notes / Description |
+|--------------------|----------------|------------|-----------|--------------|------------------|-------------------|
+| **Rusty-req**      | 1000           | 1000       | 0         | 100.0%       | 2.86s            | Stable performance under high concurrency; precise control of per-request and total timeouts |
+| **httpx**          | 1000           | 0          | 0         | 0.0%         | 26.77s           | Timeout parameters did not take effect; overall performance abnormal |
+| **aiohttp**        | 1000           | 100        | 900       | 10.0%        | 2.66s            | Per-request timeout effective, but global timeout control insufficient |
+| **requests**       | 1000           | 1000       | 0         | 100.0%       | 3.45s            | Synchronous blocking mode; not suitable for large-scale concurrent requests |
+
+Key takeaways:
+- **Rusty-req** can complete tasks within strict global timeout limits while maintaining high concurrency and stability.
+- Traditional asynchronous libraries struggle with global timeout enforcement and extreme concurrency scenarios.
+- Synchronous libraries like `requests` produce correct results but are not scalable for large-scale concurrent requests.
+
+![Timeout Performance Comparison](https://raw.githubusercontent.com/KAY53N/rusty-req/main/docs/images/timeout_performance_comparison.png)
 
 ---
 
