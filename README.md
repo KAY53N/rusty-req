@@ -40,6 +40,51 @@ pip install target/wheels/rusty_req-*.whl
 cargo watch -s "maturin develop"
 ```
 
+## ⚙️ Proxy Configuration & Debug
+
+### 1. Using Proxy
+
+If you need to access external networks through a proxy, create a `ProxyConfig` object and set it as a global proxy:
+
+```python
+import asyncio
+import rusty_req
+
+async def proxy_example():
+    # Create ProxyConfig object
+    proxy = rusty_req.ProxyConfig(
+        http="http://127.0.0.1:7890",
+        https="http://127.0.0.1:7890"
+    )
+
+    # Set global proxy (all requests will use this proxy)
+    await rusty_req.set_global_proxy(proxy)
+
+    # Send request (will go through proxy automatically)
+    resp = await rusty_req.fetch_single(url="https://httpbin.org/get")
+    print(resp)
+
+if __name__ == "__main__":
+    asyncio.run(proxy_example())
+```
+
+### 2. Debug Logging
+
+`set_debug` enables debug mode, supporting **console output** and **log file writing**:
+
+```python
+import rusty_req
+
+# Print debug logs to console only
+rusty_req.set_debug(True)
+
+# Print to console and write to log file
+rusty_req.set_debug(True, "logs/debug.log")
+
+# Disable debug mode
+rusty_req.set_debug(False)
+```
+
 ## 📦 Example Usage
 ### 1. Fetching a Single Request (`fetch_single`)
 Perfect for making a single asynchronous call and awaiting its result.

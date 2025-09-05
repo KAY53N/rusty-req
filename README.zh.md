@@ -38,6 +38,51 @@ pip install target/wheels/rusty_req-*.whl
 cargo watch -s "maturin develop"
 ```
 
+## ⚙️ 代理配置 & 调试
+
+### 1. 使用代理
+
+如果需要通过代理访问外部网络，可以创建 `ProxyConfig` 对象并设置为全局代理：
+
+```python
+import asyncio
+import rusty_req
+
+async def proxy_example():
+  # 创建 ProxyConfig 对象
+  proxy = rusty_req.ProxyConfig(
+    http="http://127.0.0.1:7890",
+    https="http://127.0.0.1:7890"
+  )
+
+  # 设置全局代理（所有请求都会使用该代理）
+  await rusty_req.set_global_proxy(proxy)
+
+  # 发起请求（将自动通过代理）
+  resp = await rusty_req.fetch_single(url="https://httpbin.org/get")
+  print(resp)
+
+if __name__ == "__main__":
+  asyncio.run(proxy_example())
+```
+
+### 2. 调试日志
+
+`set_debug` 用于启用调试模式，支持 **控制台输出** 和 **日志文件记录**：
+
+```python
+import rusty_req
+
+# 仅在控制台打印调试信息
+rusty_req.set_debug(True)
+
+# 同时打印到控制台并写入日志文件
+rusty_req.set_debug(True, "logs/debug.log")
+
+# 关闭调试模式
+rusty_req.set_debug(False)
+```
+
 ## 📦 使用示例
 ### 1. 单个请求 (`fetch_single`)
 适合单个异步请求并等待结果的场景。
