@@ -68,14 +68,15 @@ jobs:
     strategy:
       matrix:
         python-version: ["3.9", "3.10", "3.11", "3.12", "3.13"]
-#      max-parallel: 3  # 减少并行数量，避免资源冲突
+        target: ["x86_64-apple-darwin", "aarch64-apple-darwin"]  # 分别构建
+      max-parallel: 3
     steps:
       - uses: actions/checkout@v4
 
       - name: Setup Rust
         uses: dtolnay/rust-toolchain@stable
         with:
-          targets: x86_64-apple-darwin, aarch64-apple-darwin
+          targets: ${{ matrix.target }}
 
       - name: Setup Python
         uses: actions/setup-python@v4
@@ -85,15 +86,14 @@ jobs:
       - name: Install maturin
         run: pip install maturin
 
-      - name: Build universal2 wheel
+      - name: Build wheel
         run: |
-          # 直接构建 universal2 轮子
-          maturin build --release --target universal2-apple-darwin --interpreter python
+          maturin build --release --target ${{ matrix.target }} --interpreter python
 
       - name: Upload macOS wheels
         uses: actions/upload-artifact@v4
         with:
-          name: wheels-macos-py${{ matrix.python-version }}
+          name: wheels-macos-${{ matrix.target }}-py${{ matrix.python-version }}
           path: target/wheels/*.whl
 
   build-windows:
