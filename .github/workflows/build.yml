@@ -11,7 +11,7 @@ jobs:
     strategy:
       matrix:
         python-version: ["3.9", "3.10", "3.11", "3.12", "3.13"]
-      max-parallel: 2
+      max-parallel: 5
     container:
       image: quay.io/pypa/manylinux_2_28_x86_64
     steps:
@@ -81,7 +81,7 @@ jobs:
     strategy:
       matrix:
         python-version: ["3.9", "3.10", "3.11", "3.12", "3.13"]
-      max-parallel: 2
+      max-parallel: 5
     steps:
       - uses: actions/checkout@v4
 
@@ -139,7 +139,7 @@ jobs:
     strategy:
       matrix:
         python-version: ["3.9", "3.10", "3.11", "3.12", "3.13"]
-      max-parallel: 2
+      max-parallel: 5
     steps:
       - uses: actions/checkout@v4
 
