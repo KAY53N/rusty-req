@@ -8,7 +8,7 @@ A high-performance asynchronous request library based on Rust and Python, suitab
 
 ---
 
-### 🌐 [English](README.md) | [中文](README_zh.md)
+### 🌐 [English](README.md) | [中文](README.zh.md)
 
 ## 🚀 Features
 

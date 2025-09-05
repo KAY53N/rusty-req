@@ -6,7 +6,7 @@
 
 一个基于 Rust 和 Python 的高性能异步请求库，适用于需要高吞吐量并发 HTTP 请求的场景。核心并发逻辑使用 Rust 实现，并通过 [PyO3](https://pyo3.rs/) 和 [maturin](https://github.com/PyO3/maturin) 封装为 Python 模块，将 Rust 的性能优势与 Python 的易用性结合。
 
-### 🌐 [English](README.md) | [中文](README_zh.md)
+### 🌐 [English](README.md) | [中文](README.zh.md)
 
 ## 🚀 功能特性
 
