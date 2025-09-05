@@ -158,19 +158,46 @@ jobs:
         run: |
           mkdir -p final_dist
           find dist -name "*.whl" -exec cp {} final_dist/ \;
-          echo "收集到的 wheel 文件:"
+          echo "=== 最终文件 ==="
           ls -la final_dist/
 
-      - name: Check wheels
-        run: |
-          pip install twine
-          twine check final_dist/*.whl || echo "检查失败但继续..."
+      - name: Install twine
+        run: pip install twine
 
-      - name: Publish to PyPI
-        uses: pypa/gh-action-pypi-publish@v1.11.0
-        with:
-          user: __token__
-          password: ${{ secrets.PYPI_API_TOKEN }}
-          packages-dir: final_dist
-          skip-existing: true
-          verbose: true
+      - name: Verify wheels with twine
+        run: |
+          echo "=== 详细检查每个 wheel ==="
+          for whl in final_dist/*.whl; do
+            echo "检查: $whl"
+            twine check "$whl" && echo "✅ 通过" || echo "❌ 失败"
+            echo "---"
+          done
+
+      - name: Debug - Inspect metadata in detail
+        run: |
+          echo "=== 详细检查元数据 ==="
+          for whl in final_dist/*.whl; do
+            echo "🔍 检查: $(basename $whl)"
+          
+            # 检查 METADATA 文件是否存在
+            if unzip -l "$whl" | grep -q "METADATA"; then
+              echo "✅ METADATA 文件存在"
+              # 提取并显示 METADATA 内容
+              unzip -p "$whl" "*.dist-info/METADATA" | head -20
+            else
+              echo "❌ METADATA 文件缺失"
+              unzip -l "$whl" | grep "dist-info"
+            fi
+          
+            # 检查文件名格式
+            echo "文件名: $(basename $whl)"
+            echo "---"
+          done
+
+      - name: Upload to PyPI using twine
+        env:
+          TWINE_USERNAME: __token__
+          TWINE_PASSWORD: ${{ secrets.PYPI_API_TOKEN }}
+        run: |
+          # 使用 twine 上传，跳过已存在的版本
+          twine upload --skip-existing final_dist/*.whl --verbose
