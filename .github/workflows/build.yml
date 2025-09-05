@@ -131,6 +131,9 @@ jobs:
 
   build-windows:
     runs-on: windows-latest
+    env:
+      ACTIONS_RUNNER_DEBUG: true
+      ACTIONS_STEP_DEBUG: true
     strategy:
       matrix:
         python-version: ["3.9", "3.10", "3.11", "3.12", "3.13"]
@@ -152,7 +155,6 @@ jobs:
         shell: pwsh
         run: |
           Remove-Item -Recurse -Force target, dist, final_dist -ErrorAction Ignore
-          New-Item -ItemType Directory -Path target/wheels
 
       - name: Install maturin
         run: |
@@ -163,10 +165,10 @@ jobs:
         run: |
           python -m maturin build --release --interpreter python${{ matrix.python-version }}
 
-      - name: Upload Windows wheels
+      - name: Upload Windows wheels for debugging
         uses: actions/upload-artifact@v4
         with:
-          name: wheels-windows-py${{ matrix.python-version }}
+          name: debug-wheels
           path: target/wheels/*.whl
 
   publish:
