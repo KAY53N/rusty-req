@@ -194,15 +194,104 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Download all wheels
+      # --- 下载 Linux wheels ---
+      - name: Download Linux wheels Py3.9
         uses: actions/download-artifact@v4
         with:
-          name: wheels-*
-          path: dist
+          name: wheels-linux-py3.9
+          path: dist/linux/3.9
 
+      - name: Download Linux wheels Py3.10
+        uses: actions/download-artifact@v4
+        with:
+          name: wheels-linux-py3.10
+          path: dist/linux/3.10
+
+      - name: Download Linux wheels Py3.11
+        uses: actions/download-artifact@v4
+        with:
+          name: wheels-linux-py3.11
+          path: dist/linux/3.11
+
+      - name: Download Linux wheels Py3.12
+        uses: actions/download-artifact@v4
+        with:
+          name: wheels-linux-py3.12
+          path: dist/linux/3.12
+
+      - name: Download Linux wheels Py3.13
+        uses: actions/download-artifact@v4
+        with:
+          name: wheels-linux-py3.13
+          path: dist/linux/3.13
+
+      # --- 下载 macOS wheels ---
+      - name: Download macOS wheels Py3.9
+        uses: actions/download-artifact@v4
+        with:
+          name: wheels-macos-py3.9
+          path: dist/macos/3.9
+
+      - name: Download macOS wheels Py3.10
+        uses: actions/download-artifact@v4
+        with:
+          name: wheels-macos-py3.10
+          path: dist/macos/3.10
+
+      - name: Download macOS wheels Py3.11
+        uses: actions/download-artifact@v4
+        with:
+          name: wheels-macos-py3.11
+          path: dist/macos/3.11
+
+      - name: Download macOS wheels Py3.12
+        uses: actions/download-artifact@v4
+        with:
+          name: wheels-macos-py3.12
+          path: dist/macos/3.12
+
+      - name: Download macOS wheels Py3.13
+        uses: actions/download-artifact@v4
+        with:
+          name: wheels-macos-py3.13
+          path: dist/macos/3.13
+
+      # --- 下载 Windows wheels ---
+      - name: Download Windows wheels Py3.9
+        uses: actions/download-artifact@v4
+        with:
+          name: wheels-windows-py3.9
+          path: dist/windows/3.9
+
+      - name: Download Windows wheels Py3.10
+        uses: actions/download-artifact@v4
+        with:
+          name: wheels-windows-py3.10
+          path: dist/windows/3.10
+
+      - name: Download Windows wheels Py3.11
+        uses: actions/download-artifact@v4
+        with:
+          name: wheels-windows-py3.11
+          path: dist/windows/3.11
+
+      - name: Download Windows wheels Py3.12
+        uses: actions/download-artifact@v4
+        with:
+          name: wheels-windows-py3.12
+          path: dist/windows/3.12
+
+      - name: Download Windows wheels Py3.13
+        uses: actions/download-artifact@v4
+        with:
+          name: wheels-windows-py3.13
+          path: dist/windows/3.13
+
+      # --- 显示下载的 artifact ---
       - name: Show downloaded artifacts
         run: ls -R dist || true
 
+      # --- 收集所有 wheels 到 final_dist ---
       - name: Collect all wheels into final_dist
         run: |
           mkdir -p final_dist
@@ -210,11 +299,13 @@ jobs:
           echo "=== final_dist 内容 ==="
           ls -lh final_dist
 
+      # --- 检查 wheels ---
       - name: Check wheels with twine
         run: |
           python -m pip install --upgrade pip twine
           twine check final_dist/*.whl
 
+      # --- 上传 PyPI ---
       - name: Publish to PyPI
         uses: pypa/gh-action-pypi-publish@v1.11.0
         with:
@@ -223,4 +314,3 @@ jobs:
           packages-dir: final_dist
           skip-existing: true
           verbose: true
-
