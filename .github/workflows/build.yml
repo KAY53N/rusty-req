@@ -101,7 +101,6 @@ jobs:
     strategy:
       matrix:
         python-version: ["3.9", "3.10", "3.11", "3.12", "3.13"]
-#      max-parallel: 5
     steps:
       - uses: actions/checkout@v4
 
@@ -113,11 +112,20 @@ jobs:
         with:
           python-version: ${{ matrix.python-version }}
 
-      - name: Install maturin
-        run: pip install maturin
+      - name: Install maturin & twine
+        run: pip install maturin twine
 
       - name: Build wheel
-        run: maturin build --release --interpreter python
+        run: |
+          maturin build --release --compatibility abi3 --interpreter ${{ env.pythonLocation }}\python.exe
+
+      - name: Verify wheel
+        run: |
+          for whl in target/wheels/*.whl; do
+            echo "检查 $whl"
+            twine check "$whl" || exit 1
+            unzip -t "$whl"
+          done
 
       - name: Upload Windows wheels
         uses: actions/upload-artifact@v4
@@ -194,10 +202,18 @@ jobs:
             echo "---"
           done
 
-      - name: Upload to PyPI using twine
+#      - name: Upload to PyPI using twine
+#        env:
+#          TWINE_USERNAME: __token__
+#          TWINE_PASSWORD: ${{ secrets.PYPI_API_TOKEN }}
+#        run: |
+#          # 使用 twine 上传，跳过已存在的版本
+#          twine upload --skip-existing final_dist/*.whl --verbose
+
+      - name: Upload to TestPyPI using twine
         env:
           TWINE_USERNAME: __token__
-          TWINE_PASSWORD: ${{ secrets.PYPI_API_TOKEN }}
+          TWINE_PASSWORD: ${{ secrets.TEST_PYPI_API_TOKEN }}
+          TWINE_REPOSITORY_URL: https://test.pypi.org/legacy/
         run: |
-          # 使用 twine 上传，跳过已存在的版本
           twine upload --skip-existing final_dist/*.whl --verbose
