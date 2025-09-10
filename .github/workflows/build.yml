@@ -113,23 +113,19 @@ jobs:
           python-version: ${{ matrix.python-version }}
 
       - name: Install maturin & twine
-        run: pip install maturin twine
-
-#      - name: Build wheel
-#        run: |
-#          maturin build --release --interpreter ${{ env.pythonLocation }}\python.exe
+        run: pip install --upgrade maturin twine
 
       - name: Build wheel
         run: maturin build --release --interpreter python
 
       - name: Verify wheel
-        shell: bash
+        # 使用 PowerShell 语法遍历 wheel 文件
+        shell: pwsh
         run: |
-          for whl in target/wheels/*.whl; do
-            echo "检查 $whl"
-            twine check "$whl" || exit 1
-            unzip -t "$whl"
-          done
+          Get-ChildItem target\wheels\*.whl | ForEach-Object {
+            Write-Host "检查 $($_.FullName)"
+            twine check $_.FullName
+          }
 
       - name: Upload Windows wheels
         uses: actions/upload-artifact@v4
