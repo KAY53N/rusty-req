@@ -115,9 +115,12 @@ jobs:
       - name: Install maturin & twine
         run: pip install maturin twine
 
+#      - name: Build wheel
+#        run: |
+#          maturin build --release --interpreter ${{ env.pythonLocation }}\python.exe
+
       - name: Build wheel
-        run: |
-          maturin build --release --interpreter ${{ env.pythonLocation }}\python.exe
+        run: maturin build --release --interpreter python
 
       - name: Verify wheel
         shell: bash
