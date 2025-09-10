@@ -116,7 +116,7 @@ jobs:
         run: pip install --upgrade maturin twine
 
       - name: Build wheel
-        run: maturin build --release --interpreter python
+        run: maturin build --release --interpreter "${{ matrix.python-version }}/python.exe"
 
       - name: Verify wheel
         # 使用 PowerShell 语法遍历 wheel 文件
