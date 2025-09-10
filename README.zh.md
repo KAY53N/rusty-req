@@ -289,14 +289,15 @@ if __name__ == "__main__":
 
 ### `RequestItem` 参数
 
-| 字段       | 类型              | 必填 | 描述                                                                                         |
-| :-------- | :---------------- | :--: | :------------------------------------------------------------------------------------------- |
-| `url`     | `str`             | ✅   | 目标 URL 地址。                                                                               |
-| `method`  | `str`             | ✅   | HTTP 请求方法。                                                                               |
-| `params`  | `dict` / `None`   | 否   | 对于 GET/DELETE 请求，会转换为 URL 查询参数；对于 POST/PUT/PATCH 请求，会作为 JSON body 发送。 |
-| `headers` | `dict` / `None`   | 否   | 自定义 HTTP 请求头。                                                                          |
-| `timeout` | `float`           | ✅   | 单个请求的超时时间（秒），默认 30 秒。                                                       |
-| `tag`     | `str`             | 否   | 用于标记请求或索引响应的任意字符串标签。                                                     |
+| 字段              | 类型              | 必填 | 描述                                                                    |
+|:----------------|:----------------| :--: |:----------------------------------------------------------------------|
+| `url`           | `str`           | ✅   | 目标 URL 地址。                                                            |
+| `method`        | `str`           | ✅   | HTTP 请求方法。                                                            |
+| `params`        | `dict` / `None` | 否   | 对于 GET/DELETE 请求，会转换为 URL 查询参数；对于 POST/PUT/PATCH 请求，会作为 JSON body 发送。 |
+| `headers`       | `dict` / `None` | 否   | 自定义 HTTP 请求头。                                                         |
+| `tag`           | `str`           | 否   | 用于标记请求或索引响应的任意字符串标签。                                                  |
+| `http_version`  | `str`           | 否   | 指定的http版本，默认行为是“Auto”，优先尝试 HTTP/2，如果不支持则回退 HTTP/1.1          |
+| `timeout`       | `float`         | ✅   | 单个请求的超时时间（秒），默认 30 秒。                                                 |
 
 ### `fetch_requests` 参数
 
@@ -314,33 +315,68 @@ if __name__ == "__main__":
 
 ```json
 {
-    "http_status": 200,
-    "response": "{\"data\": \"...\", \"headers\": {\"...\"}}",
-    "meta": {
-        "process_time": "0.4531",
-        "request_time": "2025-08-08 03:15:01 -> 2025-08-08 03:15:01",
-        "tag": "my-single-post"
+  "http_status": 200,
+  "response": {
+    "headers": {
+      "access-control-allow-credentials": "true",
+      "access-control-allow-origin": "*",
+      "connection": "keep-alive",
+      "content-length": "314",
+      "content-type": "application/json",
+      "date": "Wed, 10 Sep 2025 03:15:31 GMT",
+      "server": "gunicorn/19.9.0"
     },
-    "exception": {}
+    "content": "{\"data\":\"...\", \"headers\":{\"...\"}}"
+  },
+  "meta": {
+    "process_time": "2.0846",
+    "request_time": "2025-09-10 11:22:46 -> 2025-09-10 11:22:48",
+    "tag": "req-0"
+  },
+  "exception": {}
 }
 ```
 
 #### 失败响应示例（例如超时）：
 ```json
 {
-    "http_status": 0,
-    "response": "",
-    "meta": {
-        "process_time": "3.0012",
-        "request_time": "2025-08-08 03:15:05 -> 2025-08-08 03:15:08",
-        "tag": "test-req-50"
+  "http_status": 0,
+  "response": {
+    "headers": {
+      "access-control-allow-credentials": "true",
+      "access-control-allow-origin": "*",
+      "connection": "keep-alive",
+      "content-length": "314",
+      "content-type": "application/json",
+      "date": "Wed, 10 Sep 2025 03:15:31 GMT",
+      "server": "gunicorn/19.9.0"
     },
-    "exception": {
-        "type": "Timeout",
-        "message": "Request timeout after 3.00 seconds"
-    }
+    "content": ""
+  },
+  "meta": {
+    "process_time": "3.0012",
+    "request_time": "2025-08-08 03:15:05 -> 2025-08-08 03:15:08",
+    "tag": "test-req-50"
+  },
+  "exception": {
+    "type": "Timeout",
+    "message": "Request timeout after 3.00 seconds"
+  }
 }
 ```
+
+---
+
+## 更新日志
+
+查看详细更新内容请访问 [CHANGELOG](CHANGELOG.md)
+
+### &#8627; 点赞的朋友
+[![Stargazers repo roster for @KAY53N/rusty-req](https://reporoster.com/stars/KAY53N/rusty-req)](https://github.com/KAY53N/rusty-req/stargazers)
+
+### &#8627; Fork 本项目的朋友
+[![Forkers repo roster for @KAY53N/rusty-req](https://reporoster.com/forks/KAY53N/rusty-req)](https://github.com/KAY53N/rusty-req/network/members)
+
 
 ## 📄 许可证
 本项目采用 [MIT License](https://opensource.org/license/MIT).

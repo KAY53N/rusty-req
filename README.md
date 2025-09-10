@@ -294,14 +294,15 @@ Results:
 
 ### `RequestItem` Parameters
 
-| Field     | Type              | Required | Description                                                                                    |
-| :-------- | :---------------- | :------: | :--------------------------------------------------------------------------------------------- |
-| `url`     | `str`             |    ✅    | The target URL.                                                                                |
-| `method`  | `str`             |    ✅    | The HTTP method.                                                                               |
-| `params`  | `dict` / `None`   |    No    | For GET/DELETE, converted to URL query parameters. For POST/PUT/PATCH, sent as a JSON body.    |
-| `headers` | `dict` / `None`   |    No    | Custom HTTP headers.                                                                           |
-| `timeout` | `float`           |    ✅    | Timeout for this individual request in seconds. Defaults to 30s.                               |
-| `tag`     | `str`             |    No    | An arbitrary tag to help identify or index the response.                                       |
+| Field             | Type            | Required | Description                                                                                                                                    |
+|:------------------|:----------------|:--------:|:-----------------------------------------------------------------------------------------------------------------------------------------------|
+| `url`             | `str`           |    ✅     | The target URL.                                                                                                                                |
+| `method`          | `str`           |    ✅     | The HTTP method.                                                                                                                               |
+| `params`          | `dict` / `None` |    No    | For GET/DELETE, converted to URL query parameters. For POST/PUT/PATCH, sent as a JSON body.                                                    |
+| `headers`         | `dict` / `None` |    No    | Custom HTTP headers.                                                                                                                           |
+| `tag`             | `str`           |    No    | An arbitrary tag to help identify or index the response.                                                                                       |
+| `http_version`    | `str`           |    No    | The default behavior when the HTTP version is set to “Auto” is to attempt HTTP/2 first, and fall back to HTTP/1.1 if HTTP/2 is not supported.  |
+| `timeout`         | `float`         |    ✅     | Timeout for this individual request in seconds. Defaults to 30s.                                                                               |
 
 ### `fetch_requests` Parameters
 
@@ -319,33 +320,68 @@ Both `fetch_single` and `fetch_requests` return a dictionary (or a list of dicti
 
 ```json
 {
-    "http_status": 200,
-    "response": "{\"data\": \"...\", \"headers\": {\"...\"}}",
-    "meta": {
-        "process_time": "0.4531",
-        "request_time": "2025-08-08 03:15:01 -> 2025-08-08 03:15:01",
-        "tag": "my-single-post"
+  "http_status": 200,
+  "response": {
+    "headers": {
+      "access-control-allow-credentials": "true",
+      "access-control-allow-origin": "*",
+      "connection": "keep-alive",
+      "content-length": "314",
+      "content-type": "application/json",
+      "date": "Wed, 10 Sep 2025 03:15:31 GMT",
+      "server": "gunicorn/19.9.0"
     },
-    "exception": {}
+    "content": "{\"data\":\"...\", \"headers\":{\"...\"}}"
+  },
+  "meta": {
+    "process_time": "2.0846",
+    "request_time": "2025-09-10 11:22:46 -> 2025-09-10 11:22:48",
+    "tag": "req-0"
+  },
+  "exception": {}
 }
 ```
 
 #### Example of a failed response (e.g., timeout):
 ```json
 {
-    "http_status": 0,
-    "response": "",
-    "meta": {
-        "process_time": "3.0012",
-        "request_time": "2025-08-08 03:15:05 -> 2025-08-08 03:15:08",
-        "tag": "test-req-50"
+  "http_status": 0,
+  "response": {
+    "headers": {
+      "access-control-allow-credentials": "true",
+      "access-control-allow-origin": "*",
+      "connection": "keep-alive",
+      "content-length": "314",
+      "content-type": "application/json",
+      "date": "Wed, 10 Sep 2025 03:15:31 GMT",
+      "server": "gunicorn/19.9.0"
     },
-    "exception": {
-        "type": "Timeout",
-        "message": "Request timeout after 3.00 seconds"
-    }
+    "content": ""
+  },
+  "meta": {
+    "process_time": "3.0012",
+    "request_time": "2025-08-08 03:15:05 -> 2025-08-08 03:15:08",
+    "tag": "test-req-50"
+  },
+  "exception": {
+    "type": "Timeout",
+    "message": "Request timeout after 3.00 seconds"
+  }
 }
 ```
+
+## Changelog
+
+For a detailed list of changes, see the [CHANGELOG](CHANGELOG.md)
+
+---
+
+### &#8627; Stargazers
+[![Stargazers repo roster for @KAY53N/rusty-req](https://reporoster.com/stars/KAY53N/rusty-req)](https://github.com/KAY53N/rusty-req/stargazers)
+
+### &#8627; Forkers
+[![Forkers repo roster for @KAY53N/rusty-req](https://reporoster.com/forks/KAY53N/rusty-req)](https://github.com/KAY53N/rusty-req/network/members)
+
 
 ## 📄 License
 This project is licensed under the [MIT License](https://opensource.org/license/MIT).
