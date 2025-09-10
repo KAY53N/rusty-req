@@ -117,7 +117,7 @@ jobs:
 
       - name: Build wheel
         run: |
-          maturin build --release --compatibility abi3 --interpreter ${{ env.pythonLocation }}\python.exe
+          maturin build --release --interpreter ${{ env.pythonLocation }}\python.exe
 
       - name: Verify wheel
         run: |
