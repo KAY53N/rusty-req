@@ -120,6 +120,7 @@ jobs:
           maturin build --release --interpreter ${{ env.pythonLocation }}\python.exe
 
       - name: Verify wheel
+        shell: bash
         run: |
           for whl in target/wheels/*.whl; do
             echo "检查 $whl"
