@@ -1,14 +1,13 @@
 # Changelog
 
 ## [0.3.72] - 2025.09.11
+### Added
+- 增加指定请求的http协议版本
+- 新增http_version参数支持，提供完整的HTTP协议版本控制，包括AUTO/HTTP1_ONLY/HTTP2/HTTP2_PRIOR_KNOWLEDGE选项
 ### Changed
 - 代码结构拆分
 ### Fixed
 - 代理设置的用户名和密码支持
-
-## [0.3.71] - 2025.09.11
-### Added
-- 增加指定请求的http协议版本
 
 ## [0.3.65] - 2025-09-05
 ### Added

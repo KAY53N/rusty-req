@@ -202,18 +202,18 @@ jobs:
             echo "---"
           done
 
-#      - name: Upload to PyPI using twine
-#        env:
-#          TWINE_USERNAME: __token__
-#          TWINE_PASSWORD: ${{ secrets.PYPI_API_TOKEN }}
-#        run: |
-#          # 使用 twine 上传，跳过已存在的版本
-#          twine upload --skip-existing final_dist/*.whl --verbose
-
-      - name: Upload to TestPyPI using twine
+      - name: Upload to PyPI using twine
         env:
           TWINE_USERNAME: __token__
-          TWINE_PASSWORD: ${{ secrets.TEST_PYPI_API_TOKEN }}
-          TWINE_REPOSITORY_URL: https://test.pypi.org/legacy/
+          TWINE_PASSWORD: ${{ secrets.PYPI_API_TOKEN }}
         run: |
+          # 使用 twine 上传，跳过已存在的版本
           twine upload --skip-existing final_dist/*.whl --verbose
+
+#      - name: Upload to TestPyPI using twine
+#        env:
+#          TWINE_USERNAME: __token__
+#          TWINE_PASSWORD: ${{ secrets.TEST_PYPI_API_TOKEN }}
+#          TWINE_REPOSITORY_URL: https://test.pypi.org/legacy/
+#        run: |
+#          twine upload --skip-existing final_dist/*.whl --verbose
