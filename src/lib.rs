@@ -12,7 +12,7 @@ use reqwest::Client;
 
 pub use network::{HttpVersion, ProxyConfig};
 pub use request::{RequestItem, fetch_single, fetch_requests, set_global_proxy};
-pub use debug::set_debug;
+pub use crate::debug::set_debug;
 pub use request::concurrency::ConcurrencyMode;
 
 // 全局 Client 和 Proxy
