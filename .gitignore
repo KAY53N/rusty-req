@@ -21,3 +21,4 @@ target
 .idea
 tests/.idea
 tests/*
+Cargo.lock
