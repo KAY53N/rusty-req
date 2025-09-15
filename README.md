@@ -302,6 +302,7 @@ Results:
 | `headers`         | `dict` / `None` |    No    | Custom HTTP headers.                                                                                                                           |
 | `tag`             | `str`           |    No    | An arbitrary tag to help identify or index the response.                                                                                       |
 | `http_version`    | `str`           |    No    | The default behavior when the HTTP version is set to “Auto” is to attempt HTTP/2 first, and fall back to HTTP/1.1 if HTTP/2 is not supported.  |
+| `ssl_verify`      | `bool`          |    No    | **SSL certificate verification** (default `True`, set `False` to disable for self-signed certificates)      |
 | `timeout`         | `float`         |    ✅     | Timeout for this individual request in seconds. Defaults to 30s.                                                                               |
 
 ### `fetch_requests` Parameters

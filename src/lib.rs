@@ -14,6 +14,7 @@ pub use network::{HttpVersion, ProxyConfig};
 pub use request::{RequestItem, fetch_single, fetch_requests, set_global_proxy};
 pub use crate::debug::set_debug;
 pub use request::concurrency::ConcurrencyMode;
+use crate::network::SslVerify;
 
 // 全局 Client 和 Proxy
 const DEFAULT_USER_AGENT: &str = "Rust/1.88.0 (6b00bc388) reqwest/0.11.27";
@@ -40,6 +41,7 @@ fn rusty_req(_py: Python, m: &PyModule) -> PyResult<()> {
     m.add_class::<ConcurrencyMode>()?;
     m.add_class::<RequestItem>()?;
     m.add_class::<HttpVersion>()?;
+    m.add_class::<SslVerify>()?;
 
     // 暴露函数
     use pyo3::wrap_pyfunction;

@@ -289,15 +289,16 @@ if __name__ == "__main__":
 
 ### `RequestItem` 参数
 
-| 字段              | 类型              | 必填 | 描述                                                                    |
-|:----------------|:----------------| :--: |:----------------------------------------------------------------------|
-| `url`           | `str`           | ✅   | 目标 URL 地址。                                                            |
-| `method`        | `str`           | ✅   | HTTP 请求方法。                                                            |
-| `params`        | `dict` / `None` | 否   | 对于 GET/DELETE 请求，会转换为 URL 查询参数；对于 POST/PUT/PATCH 请求，会作为 JSON body 发送。 |
-| `headers`       | `dict` / `None` | 否   | 自定义 HTTP 请求头。                                                         |
-| `tag`           | `str`           | 否   | 用于标记请求或索引响应的任意字符串标签。                                                  |
-| `http_version`  | `str`           | 否   | 指定的http版本，默认行为是“Auto”，优先尝试 HTTP/2，如果不支持则回退 HTTP/1.1          |
-| `timeout`       | `float`         | ✅   | 单个请求的超时时间（秒），默认 30 秒。                                                 |
+| 字段             | 类型              | 必填 | 描述                                                                    |
+|:---------------|:----------------| :--: |:----------------------------------------------------------------------|
+| `url`          | `str`           | ✅   | 目标 URL 地址。                                                            |
+| `method`       | `str`           | ✅   | HTTP 请求方法。                                                            |
+| `params`       | `dict` / `None` | 否   | 对于 GET/DELETE 请求，会转换为 URL 查询参数；对于 POST/PUT/PATCH 请求，会作为 JSON body 发送。 |
+| `headers`      | `dict` / `None` | 否   | 自定义 HTTP 请求头。                                                         |
+| `tag`          | `str`           | 否   | 用于标记请求或索引响应的任意字符串标签。                                                  |
+| `http_version` | `str`           | 否   | 指定的http版本，默认行为是“Auto”，优先尝试 HTTP/2，如果不支持则回退 HTTP/1.1          |
+| `ssl_verify`   | `bool`          | 否   | **SSL 证书验证** (默认 `True` 启用验证，设为 `False` 可禁用以支持自签名证书) |
+| `timeout`      | `float`         | ✅   | 单个请求的超时时间（秒），默认 30 秒。                                                 |
 
 ### `fetch_requests` 参数
 

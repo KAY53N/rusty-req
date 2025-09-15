@@ -2,21 +2,22 @@ use std::collections::HashMap;
 use std::time::{Duration, SystemTime};
 use pyo3::prelude::*;
 use pyo3::types::{PyDict, PyList};
-use pyo3_asyncio::generic::future_into_py;
-use reqwest::{Client, Proxy, StatusCode};
+use reqwest::{Client, Proxy};
 use crate::request::{execute_with_join_all, execute_with_select_all, RequestItem};
-use crate::network::{ProxyConfig, HttpVersion};
+use crate::network::{HttpVersion};
 use serde_json::Value;
 use url::Url;
-use crate::{ConcurrencyMode, GLOBAL_CLIENT, GLOBAL_PROXY};
+use crate::network::SslVerify;
+use crate::{ConcurrencyMode, ProxyConfig, GLOBAL_CLIENT, GLOBAL_PROXY};
 use crate::debug::debug_log;
 use crate::utils::{format_datetime, py_to_json};
 
 
-pub(crate) async fn create_client_with_proxy(
-    url: &str,
-    proxy_config: &ProxyConfig,
+pub(crate) async fn create_reqwest_client(
+    request_url: &str,
+    proxy_config: &Option<ProxyConfig>,
     http_version: &HttpVersion,
+    ssl_verify: bool,
 ) -> Result<Client, Box<dyn std::error::Error>> {
     let mut builder = Client::builder()
         .timeout(Duration::from_secs(30))
@@ -27,72 +28,88 @@ pub(crate) async fn create_client_with_proxy(
 
     builder = http_version.apply_to_builder(builder);
 
-    if let Some(all_proxy) = &proxy_config.all {
-        let proxy_url = match (&proxy_config.username, &proxy_config.password) {
-            (Some(user), Some(pass)) => {
-                let mut url_parsed = Url::parse(all_proxy)?;
-                let _ = url_parsed.set_username(user);
-                let _ = url_parsed.set_password(Some(pass));
-                url_parsed.to_string()
-            }
-            (Some(user), None) => {
-                let mut url_parsed = Url::parse(all_proxy)?;
-                let _ = url_parsed.set_username(user);
-                url_parsed.to_string()
-            }
-            _ => all_proxy.clone(),
-        };
-        builder = builder.proxy(Proxy::all(&proxy_url)?);
-    } else {
-        let parsed = Url::parse(url)?;
-        match parsed.scheme() {
-            "http" => {
-                if let Some(http_proxy) = &proxy_config.http {
-                    builder = builder.proxy(Proxy::http(http_proxy)?);
+    if !ssl_verify {
+        builder = builder
+            .danger_accept_invalid_certs(true)
+            .danger_accept_invalid_hostnames(true);
+    }
+
+    if let Some(config) = proxy_config { // 解包 Option<ProxyConfig>
+        if let Some(all_proxy) = &config.all {
+            let proxy_url = match (&config.username, &config.password) {
+                (Some(user), Some(pass)) => {
+                    let mut url_parsed = Url::parse(all_proxy)?;
+                    let _ = url_parsed.set_username(user);
+                    let _ = url_parsed.set_password(Some(pass));
+                    url_parsed.to_string()
                 }
-            }
-            "https" => {
-                if let Some(https_proxy) = &proxy_config.https {
-                    builder = builder.proxy(Proxy::https(https_proxy)?);
+                (Some(user), None) => {
+                    let mut url_parsed = Url::parse(all_proxy)?;
+                    let _ = url_parsed.set_username(user);
+                    url_parsed.to_string()
                 }
+                _ => all_proxy.clone(),
+            };
+            builder = builder.proxy(Proxy::all(&proxy_url)?);
+        } else {
+            // 如果没有 all_proxy，则根据 scheme 判断
+            let parsed = Url::parse(request_url)?; // 使用请求的 url 来判断 scheme
+            match parsed.scheme() {
+                "http" => {
+                    if let Some(http_proxy) = &config.http {
+                        builder = builder.proxy(Proxy::http(http_proxy)?);
+                    }
+                }
+                "https" => {
+                    if let Some(https_proxy) = &config.https {
+                        builder = builder.proxy(Proxy::https(https_proxy)?);
+                    }
+                }
+                _ => {}
             }
-            _ => {}
         }
     }
 
     Ok(builder.build()?)
 }
 
-pub async fn execute_single_request(req: RequestItem, base_client: Option<Client>) -> HashMap<String, String> {
+pub async fn execute_single_request(req: RequestItem, _base_client: Option<Client>) -> HashMap<String, String> {
     let mut result = HashMap::new();
     result.insert("response".to_string(), String::new());
 
     let start = SystemTime::now();
     let http_version = req.http_version.clone().unwrap_or(HttpVersion::Auto);
 
-    let proxy_config = if req.proxy.is_some() { req.proxy.clone() } else { GLOBAL_PROXY.lock().await.clone() };
+    // 获取代理配置，优先使用请求中的，否则使用全局的
+    let proxy_config = if req.proxy.is_some() {
+        req.proxy.clone()
+    } else {
+        GLOBAL_PROXY.lock().await.clone()
+    };
 
-    let client = if let Some(proxy_config) = &proxy_config {
-        match create_client_with_proxy(&req.url, proxy_config, &http_version).await {
-            Ok(client) => client,
-            Err(e) => {
-                result.insert("http_status".to_string(), "0".to_string());
-                let mut exc = serde_json::Map::new();
-                exc.insert("type".to_string(), Value::String("ProxyError".to_string()));
-                exc.insert("message".to_string(), Value::String(format!("Proxy configuration error: {}", e)));
-                result.insert("exception".to_string(), Value::Object(exc).to_string());
+    // 获取 ssl_verify 布尔值，如果为 None 则默认 true
+    let ssl_verify_bool = req.ssl_verify.unwrap_or(true);
 
-                let mut meta = serde_json::Map::new();
-                meta.insert("request_time".to_string(), Value::String("".to_string()));
-                meta.insert("process_time".to_string(), Value::String("0.0000".to_string()));
-                if let Some(tag) = req.tag.clone() { meta.insert("tag".to_string(), Value::String(tag)); }
-                result.insert("meta".to_string(), Value::Object(meta).to_string());
-                return result;
-            }
+    // 总是创建一个新的客户端，确保 ssl_verify 和 proxy 配置生效
+    let client = match create_reqwest_client(&req.url, &proxy_config, &http_version, ssl_verify_bool).await {
+        Ok(c) => c,
+        Err(e) => {
+            result.insert("http_status".to_string(), "0".to_string());
+            let mut exc = serde_json::Map::new();
+            exc.insert("type".to_string(), Value::String("ClientBuildError".to_string()));
+            exc.insert("message".to_string(), Value::String(format!("Failed to build reqwest client: {}", e)));
+            result.insert("exception".to_string(), Value::Object(exc).to_string());
+
+            let mut meta = serde_json::Map::new();
+            meta.insert("request_time".to_string(), Value::String("".to_string()));
+            meta.insert("process_time".to_string(), Value::String("0.0000".to_string()));
+            if let Some(tag) = req.tag.clone() { meta.insert("tag".to_string(), Value::String(tag)); }
+            result.insert("meta".to_string(), Value::Object(meta).to_string());
+            return result;
         }
-    } else if let Some(client) = base_client { client }
-    else { GLOBAL_CLIENT.lock().await.clone() };
+    };
 
+    // 客户端创建成功后，继续原有的请求逻辑
     let method = req.method.clone().unwrap_or_else(|| "GET".to_string()).to_uppercase();
     let method = method.parse::<reqwest::Method>().unwrap_or(reqwest::Method::GET);
 
@@ -235,10 +252,11 @@ pub fn fetch_single<'py>(
     tag: Option<String>,
     proxy: Option<ProxyConfig>,
     http_version: Option<HttpVersion>,
+    ssl_verify: Option<bool>,
 ) -> PyResult<&'py PyAny> {
     // 这里直接调用 execute_single_request 异步包装
     pyo3_asyncio::tokio::future_into_py(py, async move {
-        let req = RequestItem { url, method, params, timeout, tag, headers, proxy, http_version };
+        let req = RequestItem { url, method, params, timeout, tag, headers, proxy, http_version, ssl_verify };
         let result = execute_single_request(req, None).await;
         Python::with_gil(|py| -> PyResult<Py<PyAny>> {
             let dict = PyDict::new(py);
