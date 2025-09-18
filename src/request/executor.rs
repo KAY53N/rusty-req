@@ -34,6 +34,17 @@ pub(crate) async fn create_reqwest_client(
             .danger_accept_invalid_hostnames(true);
     }
 
+    // 检查是否信任环境变量，默认为 true
+    let trust_env = proxy_config
+        .as_ref()
+        .and_then(|config| config.trust_env)
+        .unwrap_or(true);
+
+    // 如果不信任环境变量，禁用自动代理检测
+    if !trust_env {
+        builder = builder.no_proxy();
+    }
+
     if let Some(config) = proxy_config { // 解包 Option<ProxyConfig>
         if let Some(all_proxy) = &config.all {
             let proxy_url = match (&config.username, &config.password) {

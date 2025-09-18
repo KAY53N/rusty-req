@@ -300,6 +300,22 @@ if __name__ == "__main__":
 | `ssl_verify`   | `bool`          | 否   | **SSL 证书验证** (默认 `True` 启用验证，设为 `False` 可禁用以支持自签名证书) |
 | `timeout`      | `float`         | ✅   | 单个请求的超时时间（秒），默认 30 秒。                                                 |
 
+---
+
+### `ProxyConfig` 参数
+
+| 字段         | 类型                  | 必填    | 描述                                                                 |
+|:------------|:---------------------|:--------|:--------------------------------------------------------------------|
+| `http`      | `str` / `None`       | 否      | HTTP 请求使用的代理地址（例如：`http://127.0.0.1:8080`）。           |
+| `https`     | `str` / `None`       | 否      | HTTPS 请求使用的代理地址。                                          |
+| `all`       | `str` / `None`       | 否      | 同时应用于所有协议的代理地址，会覆盖 `http` 和 `https`。            |
+| `no_proxy`  | `List[str]` / `None` | 否      | 不使用代理的主机名或 IP 列表。                                      |
+| `username`  | `str` / `None`       | 否      | 可选的代理认证用户名。                                              |
+| `password`  | `str` / `None`       | 否      | 可选的代理认证密码。                                                |
+| `trust_env` | `bool` / `None`      | 否      | 是否信任系统环境变量中的代理配置（如 `HTTP_PROXY`、`NO_PROXY`）。   |
+
+---
+
 ### `fetch_requests` 参数
 
 | 字段             | 类型                  | 必填 | 描述                                                                                     |
@@ -307,6 +323,24 @@ if __name__ == "__main__":
 | `requests`       | `List[RequestItem]`   | ✅   | 待并发执行的 `RequestItem` 列表。                                                       |
 | `total_timeout`  | `float`               | 否   | 整个批量请求的全局超时时间（秒）。                                                      |
 | `mode`           | `ConcurrencyMode`     | 否   | 并发策略。`SELECT_ALL`（默认）为尽力收集模式，`JOIN_ALL` 为原子执行模式（全有或全无）。详见第 3 节。 |
+
+---
+
+### `fetch_single` 参数
+
+| 字段          | 类型                  | 必填    | 描述                                                                                                         |
+|:--------------|:--------------------|:--------|:------------------------------------------------------------------------------------------------------------|
+| `url`         | `str`               | ✅      | 目标请求的 URL。                                                                                             |
+| `method`      | `str` / `None`      | 否      | HTTP 请求方法，例如 `"GET"`、`"POST"`，默认可由客户端自行处理。                                               |
+| `params`      | `dict` / `None`     | 否      | 请求参数。对于 GET/DELETE 请求，会被转换为 URL 查询参数；对于 POST/PUT/PATCH 请求，会作为 JSON body 发送。   |
+| `timeout`     | `float` / `None`    | 否      | 当前请求的超时时间（秒），默认值可为 30 秒。                                                               |
+| `headers`     | `dict` / `None`     | 否      | 自定义 HTTP 请求头。                                                                                         |
+| `tag`         | `str` / `None`      | 否      | 任意标签，用于标识或索引请求响应。                                                                         |
+| `proxy`       | `ProxyConfig` / `None` | 否   | 可选代理配置，若提供则应用于此请求。                                                                       |
+| `http_version`| `HttpVersion` / `None` | 否   | HTTP 版本选择，通常支持 `"Auto"`（尝试 HTTP/2，失败回退 HTTP/1.1）、`"1.1"`、`"2"` 等。                      |
+| `ssl_verify`  | `bool` / `None`     | 否      | 是否验证 SSL 证书，默认 `True`，若为 `False` 则忽略自签名证书验证。                                         |
+
+---
 
 ### 响应字典格式
 

@@ -305,6 +305,22 @@ Results:
 | `ssl_verify`      | `bool`          |    No    | **SSL certificate verification** (default `True`, set `False` to disable for self-signed certificates)      |
 | `timeout`         | `float`         |    ✅     | Timeout for this individual request in seconds. Defaults to 30s.                                                                               |
 
+---
+
+### `ProxyConfig` Parameters
+
+| Field       | Type                 | Required | Description                                                                 |
+|:------------|:---------------------|:--------:|:----------------------------------------------------------------------------|
+| `http`      | `str` / `None`       |    No    | Proxy URL for HTTP requests (e.g. `http://127.0.0.1:8080`).                  |
+| `https`     | `str` / `None`       |    No    | Proxy URL for HTTPS requests.                                               |
+| `all`       | `str` / `None`       |    No    | A single proxy URL applied to all schemes (overrides `http`/`https`).        |
+| `no_proxy`  | `List[str]` / `None` |    No    | List of hostnames/IPs to exclude from proxying.                              |
+| `username`  | `str` / `None`       |    No    | Optional proxy authentication username.                                      |
+| `password`  | `str` / `None`       |    No    | Optional proxy authentication password.                                      |
+| `trust_env` | `bool` / `None`      |    No    | Whether to respect system environment variables (`HTTP_PROXY`, `NO_PROXY`).  |
+
+---
+
 ### `fetch_requests` Parameters
 
 | Field           | Type                  | Required | Description                                                                                             |
@@ -312,6 +328,24 @@ Results:
 | `requests`      | `List[RequestItem]`   |    ✅    | A list of `RequestItem` objects to be executed concurrently.                                            |
 | `total_timeout` | `float`               |    No    | A global timeout in seconds for the entire batch operation.                                             |
 | `mode`          | `ConcurrencyMode`     |    No    | The concurrency strategy. `SELECT_ALL` (default) for best-effort collection. `JOIN_ALL` for atomic (all-or-nothing) execution. See Section 3 for a detailed comparison.|
+
+---
+
+### `fetch_single` Parameters
+
+| Field         | Type                  | Required | Description                                                                                                     |
+|:--------------|:--------------------|:--------:|:----------------------------------------------------------------------------------------------------------------|
+| `url`         | `str`               | ✅       | The target request URL.                                                                                          |
+| `method`      | `str` / `None`      | No       | HTTP method, e.g., `"GET"`, `"POST"`. If not provided, the client may handle defaults.                          |
+| `params`      | `dict` / `None`     | No       | Request parameters. For GET/DELETE, converted to URL query parameters; for POST/PUT/PATCH, sent as JSON body.   |
+| `timeout`     | `float` / `None`    | No       | Timeout for this request in seconds. Defaults to 30s.                                                           |
+| `headers`     | `dict` / `None`     | No       | Custom HTTP request headers.                                                                                    |
+| `tag`         | `str` / `None`      | No       | Arbitrary tag to help identify or index the response.                                                           |
+| `proxy`       | `ProxyConfig` / `None` | No    | Optional proxy configuration. Applied to this request if provided.                                              |
+| `http_version`| `HttpVersion` / `None` | No    | HTTP version choice, usually supports `"Auto"` (try HTTP/2, fallback to HTTP/1.1), `"1.1"`, `"2"`, etc.         |
+| `ssl_verify`  | `bool` / `None`     | No       | Whether to verify SSL certificates. Defaults to `True`; set `False` to ignore self-signed certificates.        |
+
+---
 
 ### Response Dictionary Format
 
