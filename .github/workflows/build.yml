@@ -44,27 +44,23 @@ jobs:
           PYTHON_TAG="cp${PYTHON_VERSION//./}-cp${PYTHON_VERSION//./}"
           echo "拼接的 Python TAG: $PYTHON_TAG"
       
-          # 尝试先找带 t 的目录，再找普通目录
-          PYTHON_DIR=$(find /opt/python -maxdepth 1 -type d -name "${PYTHON_TAG}t" | head -1)
+          echo "=== /opt/python 下实际存在的目录 ==="
+          ls -1 /opt/python
+      
+          # 尝试用 grep 模糊匹配带 t 或不带 t 的目录
+          PYTHON_DIR=$(ls -1 /opt/python | grep -E "^${PYTHON_TAG}t?$" | head -1)
           if [[ -n "$PYTHON_DIR" ]]; then
-            echo "✅ 找到解释器目录 (带 t 后缀): $PYTHON_DIR"
+            PYTHON_DIR="/opt/python/$PYTHON_DIR"
+            echo "✅ 找到 Python 目录: $PYTHON_DIR"
           else
-            echo "⚠️ 没找到带 t 后缀的目录，尝试普通目录..."
-            PYTHON_DIR=$(find /opt/python -maxdepth 1 -type d -name "${PYTHON_TAG}" | head -1)
-            if [[ -n "$PYTHON_DIR" ]]; then
-              echo "✅ 找到解释器目录: $PYTHON_DIR"
-            else
-              echo "❌ 没找到解释器目录"
-              echo "=== /opt/python 下实际存在的目录 ==="
-              ls -1 /opt/python
-              exit 1
-            fi
+            echo "❌ 没找到解释器目录"
+            exit 1
           fi
       
           PYTHON_BIN="${PYTHON_DIR}/bin"
           echo "使用解释器路径: $PYTHON_BIN"
       
-          # 显示 python 和 pip 版本
+          echo "=== Python 和 pip 版本 ==="
           $PYTHON_BIN/python --version
           $PYTHON_BIN/pip --version
       
@@ -88,6 +84,7 @@ jobs:
       
           echo "=== 构建完成，列出输出目录内容 ==="
           ls -lh $OUTPUT_DIR
+
 
   
       - name: List built wheels
