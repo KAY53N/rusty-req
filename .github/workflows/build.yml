@@ -14,7 +14,7 @@ jobs:
         os: [ubuntu-latest, windows-latest, macos-latest]
         include:
           - os: windows-latest
-            python-version: '3.11'
+            python-version: '3.11' # For Windows, explicitly use 3.11 as a base, but cibuildwheel will build for more.
 
     steps:
       - uses: actions/checkout@v4
@@ -51,9 +51,8 @@ jobs:
 
       - name: Build wheels with cibuildwheel
         run: |
-          set -x
           cibuildwheel --output-dir wheelhouse . 2>&1 | tee build.log
-          BUILD_EXIT_CODE=${PIPESTATUS[0]}
+          BUILD_EXIT_CODE=${PIPESTATUS[0]} # Capture the exit code of cibuildwheel
           
           echo "=== Build completed with exit code: $BUILD_EXIT_CODE ==="
           echo "=== Build log contents ==="
@@ -63,41 +62,31 @@ jobs:
             echo "✅ Wheels generated successfully"
             exit 0
           else
-            echo "❌ No wheels generated"
-            exit $BUILD_EXIT_CODE
+            echo "❌ No wheels generated or build failed"
+            exit $BUILD_EXIT_CODE # Fail the step if cibuildwheel failed or no wheels were generated
           fi
         env:
-          CIBW_BUILD: ${{ matrix.os == 'windows-latest' && 'cp311-*' || 'cp39-* cp310-* cp311-* cp312-* cp313-*' }}
+          # CIBW_BUILD: Define which Python versions to build for
+          CIBW_BUILD: ${{ matrix.os == 'windows-latest' && 'cp39-* cp310-* cp311-* cp312-* cp313-*' || 'cp39-* cp310-* cp311-* cp312-* cp313-*' }}
+          # CIBW_SKIP: Skip specific architectures or platforms
           CIBW_SKIP: "*-musllinux_* pp* *-win32"
+          # CIBW_ARCHS: Specify architectures for each OS
           CIBW_ARCHS_MACOS: "x86_64 arm64"
           CIBW_ARCHS_LINUX: "x86_64"
-          CIBW_MANYLINUX_X86_64_IMAGE: "manylinux_2_28"
           CIBW_ARCHS_WINDOWS: "AMD64"
-          # 设置 OpenSSL 环境变量
-          CIBW_ENVIRONMENT_LINUX: |
-            OPENSSL_DIR=/usr
-            OPENSSL_INCLUDE_DIR=/usr/include
-            OPENSSL_LIB_DIR=/usr/lib/x86_64-linux-gnu
-          CIBW_ENVIRONMENT_MACOS: |
-            OPENSSL_DIR=$(brew --prefix openssl)
-            OPENSSL_INCLUDE_DIR=$(brew --prefix openssl)/include
-            OPENSSL_LIB_DIR=$(brew --prefix openssl)/lib
-          CIBW_BEFORE_BUILD: "python -m pip install setuptools wheel maturin==1.9.2"
-          CIBW_BEFORE_BUILD_LINUX: |
-            sudo apt-get update
-            sudo apt-get install -y pkg-config libssl-dev
-            python -m pip install setuptools wheel maturin==1.9.2
-          CIBW_BEFORE_BUILD_WINDOWS: "python -m pip install setuptools wheel maturin==1.9.2"
-          CIBW_BEFORE_BUILD_MACOS: |
-            brew install pkg-config openssl || true
-            python -m pip install setuptools wheel maturin==1.9.2
-          CIBW_ENVIRONMENT_MACOS: "MACOSX_DEPLOYMENT_TARGET=10.12"
+          # CIBW_MANYLINUX_X86_64_IMAGE: Specify manylinux image
+          CIBW_MANYLINUX_X86_64_IMAGE: "manylinux_2_28"
+          # CIBW_ENVIRONMENT: General environment variables (macOS deployment target)
+          CIBW_ENVIRONMENT: "MACOSX_DEPLOYMENT_TARGET=10.12"
+          # CIBW_BUILD_COMMAND: Command to build the extension
           CIBW_BUILD_COMMAND: "maturin build --release --interpreter python"
-          CIBW_REPAIR_WHEEL_COMMAND_LINUX: "auditwheel repair -w {dest_dir} {wheel}"
-          # Windows 优化配置
-          CIBW_ENVIRONMENT_WINDOWS: |
-            CIBW_VIRTUALENV_SYMLINKS=0
-            CIBW_TEST_SKIP=*
+          # CIBW_REPAIR_WHEEL_COMMAND_LINUX: Command to repair wheels on Linux
+          CIBW_REPAIR_WHEEL_COMMAND_LINUX: "python -m auditwheel repair -w {dest_dir} {wheel}"
+          # OpenSSL environment variables (cibuildwheel takes care of this via CIBW_BEFORE_BUILD if needed, but for maturin, it's often handled by system paths)
+          # Removed specific CIBW_ENVIRONMENT_* for OpenSSL as they are handled by direct `brew` or `apt` installs and system `pkg-config`.
+          # CIBW_BEFORE_BUILD: Keep minimal, direct system setup is preferred
+          # Removed specific CIBW_BEFORE_BUILD_* as dependencies are handled in separate steps.
+          CIBW_BEFORE_BUILD: "" # No general CIBW_BEFORE_BUILD needed, handled by preceding steps.
 
       - name: Verify wheels
         run: |
@@ -130,120 +119,135 @@ jobs:
       - name: Download all wheels
         uses: actions/download-artifact@v4
         with:
-          path: dist
+          path: dist # Download artifacts directly into 'dist'
           pattern: wheels-*
           merge-multiple: true
 
       - name: Collect and validate wheels
         run: |
-          echo "=== 收集的 wheel 文件 ==="
+          echo "=== 收集到的 wheel 文件 ==="
           find dist -name "*.whl" -exec ls -la {} \;
           
           echo "=== 验证所有 wheel 文件 ==="
           python -m pip install twine
           
-          mkdir -p dist_final
-          find dist -name "*.whl" -exec cp {} dist_final/ \;
-          
-          for whl in dist_final/*.whl; do
-            echo "🔍 验证: $(basename $whl)"
-          
-            size=$(stat -c%s "$whl" 2>/dev/null || stat -f%z "$whl" 2>/dev/null)
+          VALID_WHEELS_EXIST=false
+          for whl in dist/*.whl; do
+            if [ ! -f "$whl" ]; then
+              continue
+            fi
+
+            echo "🔍 验证: $(basename "$whl")"
+            size=$(stat -c%s "$whl" 2>/dev/null || stat -f%z "$whl" 2>/dev/null) # Compatible stat for Linux/macOS
             echo "文件大小: $size bytes"
           
             if [ "$size" -eq 0 ]; then
-              echo "❌ 文件大小为 0，跳过"
+              echo "❌ 文件大小为 0，跳过并删除"
               rm "$whl"
               continue
             fi
           
-            python3 -c "
-  import zipfile
-  import sys
-try:
-  with zipfile.ZipFile('$whl', 'r') as zf:
-    bad_files = zf.testzip()
-    if bad_files:
-      print('❌ ZIP 损坏:', bad_files)
-      sys.exit(1)
+            # ZIP 结构验证
+            # 将当前 wheel 路径传递给 Python 脚本
+            export CURRENT_WHL_PATH="$whl"
+            if ! python3 -c "${CODE_TO_RUN}" ; then
+              echo "❌ $(basename "$whl") ZIP 验证失败，删除"
+              rm "$whl"
+              continue
+            fi
+          
+            # Twine 验证
+            if python -m twine check "$whl"; then
+              echo "✅ $(basename "$whl") 验证通过"
+              VALID_WHEELS_EXIST=true
+            else
+              echo "❌ $(basename "$whl") Twine 验证失败，删除"
+              rm "$whl"
+            fi
+            echo "---"
+          done
+          
+          if [ "$VALID_WHEELS_EXIST" = false ]; then
+            echo "❌ 没有有效的 wheel 文件可供上传"
+            exit 1
+          fi
+          
+          echo "=== 准备上传的文件 ==="
+          ls -la dist/
+        env:
+          # 定义包含正确缩进的 Python 脚本
+          CODE_TO_RUN: |
+            import zipfile
+            import sys
+            import os
 
-    files = zf.namelist()
-    has_metadata = any('METADATA' in f for f in files)
-    has_wheel = any('WHEEL' in f for f in files)
+            # 从环境变量获取当前处理的 wheel 路径
+            whl_path = os.environ.get('CURRENT_WHL_PATH')
+            if not whl_path:
+                print('Error: CURRENT_WHL_PATH not set.')
+                sys.exit(1)
+            
+            try:
+              with zipfile.ZipFile(whl_path, 'r') as zf:
+                bad_files = zf.testzip()
+                if bad_files:
+                  print('❌ ZIP 损坏:', bad_files)
+                  sys.exit(1)
+                files = zf.namelist()
+                has_metadata = any('METADATA' in f for f in files)
+                has_wheel = any('WHEEL' in f for f in files)
+                if not (has_metadata and has_wheel):
+                  print('❌ 缺少必要的元数据文件')
+                  sys.exit(1)
+                print('✅ ZIP 结构正常')
+            except zipfile.BadZipFile as e:
+              print('❌ ZIP 文件损坏:', e)
+              sys.exit(1)
+            except Exception as e:
+              print('❌ 验证失败:', e)
+              sys.exit(1)
 
-    if not (has_metadata and has_wheel):
-      print('❌ 缺少必要的元数据文件')
-      sys.exit(1)
+      - name: Upload to PyPI
+        env:
+          TWINE_USERNAME: __token__
+          TWINE_PASSWORD: ${{ secrets.PYPI_API_TOKEN }}
+        run: |
+          # Only upload files that remain in the dist folder after validation
+          python -m twine upload --skip-existing dist/*.whl --verbose
 
-    print('✅ ZIP 结构正常')
+  release:
+    needs: [publish]
+    runs-on: ubuntu-latest
+    if: startsWith(github.ref, 'refs/tags/')
+    timeout-minutes: 10
 
-except zipfile.BadZipFile as e:
-  print('❌ ZIP 文件损坏:', e)
-  sys.exit(1)
-except Exception as e:
-  print('❌ 验证失败:', e)
-  sys.exit(1)
-  " || { echo "❌ $(basename $whl) ZIP 验证失败，删除"; rm "$whl"; continue; }
-  
-  if python -m twine check "$whl"; then
-  echo "✅ $(basename $whl) 验证通过"
-  else
-  echo "❌ $(basename $whl) 验证失败，删除"
-  rm "$whl"
-  fi
-  echo "---"
-  done
-  
-  remaining_files=$(ls dist_final/*.whl 2>/dev/null | wc -l)
-  if [ "$remaining_files" -eq 0 ]; then
-  echo "❌ 没有有效的 wheel 文件"
-  exit 1
-  fi
-  
-  echo "=== 准备上传的文件 ==="
-  ls -la dist_final/
+    steps:
+      - uses: actions/checkout@v4
 
-- name: Upload to PyPI
-  env:
-    TWINE_USERNAME: __token__
-    TWINE_PASSWORD: ${{ secrets.PYPI_API_TOKEN }}
-  run: |
-    python -m twine upload --skip-existing dist_final/*.whl --verbose
+      - name: Setup Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.11'
 
-release:
-  needs: [publish]
-  runs-on: ubuntu-latest
-  if: startsWith(github.ref, 'refs/tags/')
-  timeout-minutes: 10
+      - name: Download all wheels for release
+        uses: actions/download-artifact@v4
+        with:
+          path: dist # Download artifacts directly into 'dist' for release assets
+          pattern: wheels-*
+          merge-multiple: true
 
-  steps:
-    - uses: actions/checkout@v4
+      - name: Prepare release assets
+        run: |
+          # The wheels are already in 'dist', so just list them
+          echo "=== 发布文件 ==="
+          ls -la dist/*.whl
 
-    - name: Setup Python
-      uses: actions/setup-python@v4
-      with:
-        python-version: '3.11'
-
-    - name: Download all wheels for release
-      uses: actions/download-artifact@v4
-      with:
-        path: release_dist
-        pattern: wheels-*
-        merge-multiple: true
-
-    - name: Prepare release assets
-      run: |
-        mkdir -p release_assets
-        find release_dist -name "*.whl" -exec cp {} release_assets/ \;
-        echo "=== 发布文件 ==="
-        ls -la release_assets/
-
-    - name: Create GitHub Release
-      uses: softprops/action-gh-release@v1
-      with:
-        files: release_assets/*.whl
-        draft: false
-        prerelease: false
-        generate_release_notes: true
-      env:
-        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v1
+        with:
+          files: dist/*.whl # Use the 'dist' folder for assets
+          draft: false
+          prerelease: false
+          generate_release_notes: true
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
