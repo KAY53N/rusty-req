@@ -21,25 +21,25 @@ jobs:
       image: quay.io/pypa/manylinux_2_28_x86_64
     steps:
       - uses: actions/checkout@v4
-
+  
       - name: Install system dependencies
         run: |
           dnf install -y openssl-devel pkgconfig
-
+  
       - name: Install Rust
         uses: dtolnay/rust-toolchain@stable
         with:
           toolchain: stable
       - run: echo "$HOME/.cargo/bin" >> $GITHUB_PATH
-
+  
       - name: Set up Python & Build Wheel
         shell: bash
         run: |
           PYTHON_VERSION=${{ matrix.python-version }}
           PYTHON_TAG="cp${PYTHON_VERSION/./}-cp${PYTHON_VERSION/./}"
   
-          # 匹配 cpXXX-cpXXX 或 cpXXX-cpXXXt
-          PYTHON_DIR=$(find /opt/python -maxdepth 1 -type d -regex ".*/${PYTHON_TAG}t?$" | head -1)
+          # 使用 -name 匹配 cpXXX-cpXXX 或 cpXXX-cpXXXt
+          PYTHON_DIR=$(find /opt/python -maxdepth 1 -type d \( -name "${PYTHON_TAG}" -o -name "${PYTHON_TAG}t" \) | head -1)
           if [[ -z "$PYTHON_DIR" ]]; then
             echo "❌ 没找到解释器目录 (尝试匹配 cpXXX-cpXXX 和 cpXXX-cpXXXt)"
             echo "=== /opt/python 下实际存在的目录 ==="
@@ -61,7 +61,7 @@ jobs:
             --manylinux 2_28 \
             --interpreter ${PYTHON_BIN}/python \
             --out $OUTPUT_DIR
-
+  
       - name: List built wheels
         shell: bash
         run: |
@@ -69,15 +69,15 @@ jobs:
           OUTPUT_DIR="/tmp/wheels/linux-py${PYTHON_VERSION}"
           echo "=== 列出 $OUTPUT_DIR 下的文件 ==="
           ls -lh $OUTPUT_DIR
-
+  
       - name: Verify wheel integrity
         shell: bash
         run: |
           PYTHON_VERSION=${{ matrix.python-version }}
           PYTHON_TAG="cp${PYTHON_VERSION/./}-cp${PYTHON_VERSION/./}"
   
-          # 同样匹配 cpXXX-cpXXX 或 cpXXX-cpXXXt
-          PYTHON_DIR=$(find /opt/python -maxdepth 1 -type d -regex ".*/${PYTHON_TAG}t?$" | head -1)
+          # 使用 -name 匹配 cpXXX-cpXXX 或 cpXXX-cpXXXt
+          PYTHON_DIR=$(find /opt/python -maxdepth 1 -type d \( -name "${PYTHON_TAG}" -o -name "${PYTHON_TAG}t" \) | head -1)
           if [[ -z "$PYTHON_DIR" ]]; then
             echo "❌ 没找到解释器目录 (尝试匹配 cpXXX-cpXXX 和 cpXXX-cpXXXt)"
             ls -1 /opt/python
@@ -88,7 +88,7 @@ jobs:
           OUTPUT_DIR="/tmp/wheels/linux-py${PYTHON_VERSION}"
           echo "=== 使用 ${PYTHON_BIN} 验证 wheel ==="
           ${PYTHON_BIN}/python -m twine check $OUTPUT_DIR/*.whl
-
+  
       - name: Upload Linux wheels
         uses: actions/upload-artifact@v4
         with:
