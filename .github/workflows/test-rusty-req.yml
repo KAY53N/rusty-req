@@ -1,0 +1,123 @@
+name: Cross-Platform rusty-req Test
+
+on:
+  workflow_dispatch:
+    inputs:
+      platforms:
+        description: '选择要测试的平台'
+        type: choice
+        options:
+          - all-platforms
+          - linux-only
+          - windows-only
+          - macos-only
+        default: 'all-platforms'
+      python-versions:
+        description: 'Python版本（逗号分隔）'
+        default: '3.9,3.10,3.11'
+
+jobs:
+  cross-platform-test:
+    strategy:
+      matrix:
+        os:
+          ${{
+          github.event.inputs.platforms == 'all-platforms' &&
+          '["ubuntu-latest", "windows-latest", "macos-latest"]' ||
+          github.event.inputs.platforms == 'linux-only' &&
+          '["ubuntu-latest"]' ||
+          github.event.inputs.platforms == 'windows-only' &&
+          '["windows-latest"]' ||
+          github.event.inputs.platforms == 'macos-only' &&
+          '["macos-latest"]'
+          }}
+        python-version: ${{ fromJSON(format('[{0}]', join(split(github.event.inputs.python-versions, ','), ',')) }}
+
+    runs-on: ${{ matrix.os }}
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Python ${{ matrix.python-version }} on ${{ matrix.os }}
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+
+      - name: Display platform information
+        run: |
+          echo "=== 平台信息 ==="
+          echo "操作系统: ${{ matrix.os }}"
+          python -c "
+          import platform
+          import sys
+          print(f'Python版本: {sys.version}')
+          print(f'系统平台: {platform.platform()}')
+          print(f'系统类型: {platform.system()} {platform.release()}')
+          print(f'处理器: {platform.processor()}')
+          "
+
+      - name: Install rusty-req
+        run: |
+          echo "在 ${{ matrix.os }} 上安装 rusty-req (Python ${{ matrix.python-version }})"
+          pip install --upgrade pip
+          pip install rusty-req --no-cache-dir
+
+      - name: Verify installation
+        run: |
+          echo "=== 验证安装 ==="
+          python -c "
+          try:
+              import rusty_req
+              print('✅ rusty-req 导入成功')
+              print(f'版本: {rusty_req.__version__}')
+              print(f'文件路径: {rusty_req.__file__}')
+          
+              # 平台特定的验证
+              import platform
+              system = platform.system()
+              if system == 'Windows':
+                  print('🎯 这是在 Windows 上的测试')
+              elif system == 'Linux':
+                  print('🐧 这是在 Linux 上的测试')
+              elif system == 'Darwin':
+                  print '🍎 这是在 macOS 上的测试')
+          
+          except ImportError as e:
+              print(f'❌ 导入失败: {e}')
+              exit(1)
+          except Exception as e:
+              print(f'⚠️  其他错误: {e}')
+              exit(1)
+          "
+
+      - name: Run platform-specific tests
+        run: |
+          echo "=== 运行平台特定测试 ==="
+          
+          # Windows 特定测试
+          if [[ "${{ matrix.os }}" == *"windows"* ]]; then
+            echo "运行 Windows 特定检查..."
+            python -c "
+            import os
+            print('Windows 路径分隔符:', repr(os.path.sep))
+            "
+          fi
+          
+          # Linux 特定测试
+          if [[ "${{ matrix.os }}" == *"ubuntu"* ]]; then
+            echo "运行 Linux 特定检查..."
+            python -c "
+            import os
+            print('Linux 环境变量:', dict(os.environ))
+            "
+          fi
+          
+          # macOS 特定测试
+          if [[ "${{ matrix.os }}" == *"macos"* ]]; then
+            echo "运行 macOS 特定检查..."
+            python -c "
+            import platform
+            print('macOS 版本:', platform.mac_ver())
+            "
+          fi
