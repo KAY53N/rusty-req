@@ -6,221 +6,184 @@ on:
       - 'v*'   # 例如 v0.1.0、v1.2.3 等
 
 jobs:
-  build-linux:
-    runs-on: ubuntu-latest
+  build:
+    runs-on: ${{ matrix.os }}
     strategy:
       matrix:
-        python-version: ["3.9", "3.10", "3.11", "3.12", "3.13"]
-#      max-parallel: 5
-    container:
-      image: quay.io/pypa/manylinux_2_28_x86_64
+        os: [ubuntu-latest, windows-latest, macos-latest]
+
     steps:
       - uses: actions/checkout@v4
 
-      - name: Install system dependencies
-        run: |
-          dnf install -y openssl-devel pkgconfig
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.targets }}
 
-      - name: Install Rust
+      - name: Set up additional Rust targets for macOS
+        if: matrix.os == 'macos-latest'
         run: |
-          curl https://sh.rustup.rs -sSf | sh -s -- -y
-          echo 'export PATH=$HOME/.cargo/bin:$PATH' >> ~/.bashrc
-          source ~/.bashrc
+          rustup target add x86_64-apple-darwin
+          rustup target add aarch64-apple-darwin
 
-      - name: Set up Python & Build Wheel
-        shell: bash
+      - name: Install system dependencies (Linux)
+        if: matrix.os == 'ubuntu-latest'
         run: |
-          source ~/.bashrc
+          sudo apt-get update
+          sudo apt-get install -y pkg-config libssl-dev
+
+      - name: Build wheels using cibuildwheel
+        uses: pypa/cibuildwheel@v2.16.2
+        env:
+          # 构建 Python 3.9 到 3.13 的 wheel
+          CIBW_BUILD: "cp39-* cp310-* cp311-* cp312-* cp313-*"
+
+          # 跳过一些不需要的构建
+          CIBW_SKIP: "*-musllinux_* pp*"  # 跳过 musl 和 PyPy
+
+          # macOS: 构建 universal2 wheel (包含 x86_64 和 arm64)
+          CIBW_ARCHS_MACOS: "x86_64 arm64 universal2"
+
+          # Linux: 使用 manylinux_2_28
+          CIBW_ARCHS_LINUX: "x86_64"
+          CIBW_MANYLINUX_X86_64_IMAGE: "manylinux_2_28"
+
+          # Windows: 64位
+          CIBW_ARCHS_WINDOWS: "AMD64"
+
+          # 安装构建依赖
+          CIBW_BEFORE_BUILD: |
+            pip install --upgrade pip setuptools wheel
+            pip install maturin==1.9.2
+
+          # Linux 特殊设置：安装系统依赖
+          CIBW_BEFORE_BUILD_LINUX: |
+            dnf install -y openssl-devel pkgconfig || yum install -y openssl-devel pkgconfig || apt-get update && apt-get install -y pkg-config libssl-dev
+            pip install --upgrade pip setuptools wheel
+            pip install maturin==1.9.2
+
+          # 构建命令
+          CIBW_BUILD_COMMAND: "maturin build --release --interpreter python"
+
+          # macOS 特殊处理：设置目标架构
+          CIBW_ENVIRONMENT_MACOS: >
+            CARGO_BUILD_TARGET="$( [[ $(uname -m) == 'arm64' ]] && echo 'aarch64-apple-darwin' || echo 'x86_64-apple-darwin' )"
+            MACOSX_DEPLOYMENT_TARGET="10.12"
+
+          # 测试构建的 wheel
+          CIBW_TEST_COMMAND: |
+            python -c "
+            import sys
+            print(f'Python version: {sys.version}')
+            try:
+                import {你的模块名}  # 替换为你的实际模块名
+                print('✅ 模块导入成功')
+            except ImportError as e:
+                print(f'❌ 模块导入失败: {e}')
+                sys.exit(1)
+            "
+
+          # 修复权限问题 (Linux)
+          CIBW_REPAIR_WHEEL_COMMAND_LINUX: "auditwheel repair -w {dest_dir} {wheel}"
+
+          # Windows 特殊设置
+          CIBW_BEFORE_BUILD_WINDOWS: |
+            pip install --upgrade pip setuptools wheel
+            pip install maturin==1.9.2
+
+      - name: Verify wheels
+        run: |
+          python -m pip install twine
+          python -m twine check wheelhouse/*.whl
+
+      - name: Upload wheels as artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: wheels-${{ matrix.os }}
+          path: ./wheelhouse/*.whl
+
+  publish:
+    needs: [build]
+    runs-on: ubuntu-latest
+    if: startsWith(github.ref, 'refs/tags/')
+
+    steps:
+      - name: Download all wheels
+        uses: actions/download-artifact@v4
+        with:
+          path: dist
+          pattern: wheels-*
+          merge-multiple: true
+
+      - name: Collect and validate wheels
+        run: |
+          echo "=== 收集的 wheel 文件 ==="
+          ls -la dist/
           
-          PYTHON_VERSION=${{ matrix.python-version }}
-          PYTHON_TAG="cp${PYTHON_VERSION/./}-cp${PYTHON_VERSION/./}"
+          echo "=== 验证所有 wheel 文件 ==="
+          python -m pip install twine
           
-          PYTHON_DIR=""
-          for dir in /opt/python/${PYTHON_TAG}*; do
-            if [[ -d "$dir" ]]; then
-              PYTHON_DIR="$dir"
-              break
+          for whl in dist/*.whl; do
+            echo "🔍 验证: $(basename $whl)"
+          
+            # 检查文件大小
+            size=$(stat -c%s "$whl" 2>/dev/null || stat -f%z "$whl" 2>/dev/null)
+            echo "文件大小: $size bytes"
+          
+            if [ "$size" -eq 0 ]; then
+              echo "❌ 文件大小为 0，跳过"
+              rm "$whl"
+              continue
             fi
+          
+            # 使用 twine 验证
+            if python -m twine check "$whl"; then
+              echo "✅ $(basename $whl) 验证通过"
+            else
+              echo "❌ $(basename $whl) 验证失败，删除"
+              rm "$whl"
+            fi
+            echo "---"
           done
           
-          if [[ -z "$PYTHON_DIR" ]]; then
-            echo "❌ 没找到解释器目录 /opt/python/${PYTHON_TAG}*"
-            ls -1 /opt/python
+          # 检查是否还有有效文件
+          remaining_files=$(ls dist/*.whl 2>/dev/null | wc -l)
+          if [ "$remaining_files" -eq 0 ]; then
+            echo "❌ 没有有效的 wheel 文件"
             exit 1
           fi
           
-          PYTHON_BIN="${PYTHON_DIR}/bin"
-          echo "✅ 使用解释器路径: ${PYTHON_BIN}"
-          
-          ${PYTHON_BIN}/pip install --upgrade pip
-          ${PYTHON_BIN}/pip install maturin==1.9.2
-          
-          ${PYTHON_BIN}/maturin build --release --manylinux 2_28 --interpreter ${PYTHON_BIN}/python
+          echo "=== 准备上传的文件 ==="
+          ls -la dist/
 
-      - name: Upload Linux wheels
-        uses: actions/upload-artifact@v4
-        with:
-          name: wheels-linux-py${{ matrix.python-version }}
-          path: target/wheels/*.whl
-
-  build-macos:
-    runs-on: macos-latest
-    strategy:
-      matrix:
-        python-version: ["3.9", "3.10", "3.11", "3.12", "3.13"]
-        target: ["x86_64-apple-darwin", "aarch64-apple-darwin"]  # 分别构建
-      max-parallel: 3
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Setup Rust
-        uses: dtolnay/rust-toolchain@stable
-        with:
-          targets: ${{ matrix.target }}
-
-      - name: Setup Python
-        uses: actions/setup-python@v4
-        with:
-          python-version: ${{ matrix.python-version }}
-
-      - name: Install maturin
-        run: pip install maturin
-
-      - name: Build wheel
-        run: |
-          maturin build --release --target ${{ matrix.target }} --interpreter python
-
-      - name: Upload macOS wheels
-        uses: actions/upload-artifact@v4
-        with:
-          name: wheels-macos-${{ matrix.target }}-py${{ matrix.python-version }}
-          path: target/wheels/*.whl
-
-  build-windows:
-    runs-on: windows-latest
-    strategy:
-      matrix:
-        python-version: ["3.9", "3.10", "3.11", "3.12", "3.13"]
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Setup Rust
-        uses: dtolnay/rust-toolchain@stable
-
-      - name: Setup Python
-        uses: actions/setup-python@v4
-        with:
-          python-version: ${{ matrix.python-version }}
-
-      - name: Install maturin & twine
-        run: pip install --upgrade maturin twine
-
-      - name: Build abi3 wheel (Windows 不加 --strip)
-        run: maturin build --release
-
-      - name: Verify wheel with twine
-        shell: pwsh
-        run: |
-          Get-ChildItem target\wheels\*.whl | ForEach-Object {
-            Write-Host "检查 $($_.FullName)"
-            twine check $_.FullName
-          }
-
-      - name: Verify wheel with unzip
-        shell: bash
-        run: |
-          for whl in target/wheels/*.whl; do
-            echo "🔍 检查 zip 格式: $whl"
-            unzip -t "$whl"
-          done
-
-      - name: Upload Windows wheels
-        uses: actions/upload-artifact@v4
-        with:
-          name: wheels-windows-py${{ matrix.python-version }}
-          path: target/wheels/*.whl
-
-  publish:
-    needs: [build-linux, build-macos, build-windows]
-    runs-on: ubuntu-latest
-    if: startsWith(github.ref, 'refs/tags/')
-    steps:
-      - uses: actions/checkout@v4
-
-      # 下载所有 artifacts
-      - name: Download Linux artifacts
-        uses: actions/download-artifact@v4
-        with:
-          path: dist/linux
-          pattern: wheels-linux-*
-          merge-multiple: true
-
-      - name: Download macOS artifacts
-        uses: actions/download-artifact@v4
-        with:
-          path: dist/macos
-          pattern: wheels-macos-*
-          merge-multiple: true
-
-      - name: Download Windows artifacts
-        uses: actions/download-artifact@v4
-        with:
-          path: dist/windows
-          pattern: wheels-windows-*
-          merge-multiple: true
-
-      - name: Collect all wheels
-        run: |
-          mkdir -p final_dist
-          find dist -name "*.whl" -exec cp {} final_dist/ \;
-          echo "=== 最终文件 ==="
-          ls -la final_dist/
-
-      - name: Install twine
-        run: pip install twine
-
-      - name: Verify wheels with twine
-        run: |
-          echo "=== 详细检查每个 wheel ==="
-          for whl in final_dist/*.whl; do
-            echo "检查: $whl"
-            twine check "$whl" && echo "✅ 通过" || echo "❌ 失败"
-            echo "---"
-          done
-
-      - name: Debug - Inspect metadata in detail
-        run: |
-          echo "=== 详细检查元数据 ==="
-          for whl in final_dist/*.whl; do
-            echo "🔍 检查: $(basename $whl)"
-          
-            # 检查 METADATA 文件是否存在
-            if unzip -l "$whl" | grep -q "METADATA"; then
-              echo "✅ METADATA 文件存在"
-              # 提取并显示 METADATA 内容
-              unzip -p "$whl" "*.dist-info/METADATA" | head -20
-            else
-              echo "❌ METADATA 文件缺失"
-              unzip -l "$whl" | grep "dist-info"
-            fi
-          
-            # 检查文件名格式
-            echo "文件名: $(basename $whl)"
-            echo "---"
-          done
-
-      - name: Upload to PyPI using twine
+      - name: Upload to PyPI
         env:
           TWINE_USERNAME: __token__
           TWINE_PASSWORD: ${{ secrets.PYPI_API_TOKEN }}
         run: |
-          # 使用 twine 上传，跳过已存在的版本
-          twine upload --skip-existing final_dist/*.whl --verbose
+          python -m twine upload --skip-existing dist/*.whl --verbose
 
-#      - name: Upload to TestPyPI using twine
-#        env:
-#          TWINE_USERNAME: __token__
-#          TWINE_PASSWORD: ${{ secrets.TEST_PYPI_API_TOKEN }}
-#          TWINE_REPOSITORY_URL: https://test.pypi.org/legacy/
-#        run: |
-#          twine upload --skip-existing final_dist/*.whl --verbose
+      # 可选：上传到 TestPyPI 进行测试
+      # - name: Upload to TestPyPI
+      #   env:
+      #     TWINE_USERNAME: __token__
+      #     TWINE_PASSWORD: ${{ secrets.TEST_PYPI_API_TOKEN }}
+      #   run: |
+      #     python -m twine upload --repository testpypi --skip-existing dist/*.whl --verbose
+
+  # 可选：创建 GitHub Release
+  release:
+    needs: [publish]
+    runs-on: ubuntu-latest
+    if: startsWith(github.ref, 'refs/tags/')
+
+    steps:
+      - name: Create GitHub Release
+        uses: actions/create-release@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          tag_name: ${{ github.ref }}
+          release_name: Release ${{ github.ref }}
+          draft: false
+          prerelease: false
