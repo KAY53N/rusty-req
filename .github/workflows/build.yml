@@ -37,23 +37,24 @@ jobs:
         run: |
           PYTHON_VERSION=${{ matrix.python-version }}
           PYTHON_TAG="cp${PYTHON_VERSION/./}-cp${PYTHON_VERSION/./}"
-
-          PYTHON_DIR=$(find /opt/python -maxdepth 1 -type d -name "${PYTHON_TAG}*" | head -1)
+  
+          # 匹配 cpXXX-cpXXX 或 cpXXX-cpXXXt
+          PYTHON_DIR=$(find /opt/python -maxdepth 1 -type d -regex ".*/${PYTHON_TAG}t?$" | head -1)
           if [[ -z "$PYTHON_DIR" ]]; then
-            echo "❌ 没找到解释器目录 /opt/python/${PYTHON_TAG}*"
+            echo "❌ 没找到解释器目录 (尝试匹配 cpXXX-cpXXX 和 cpXXX-cpXXXt)"
             echo "=== /opt/python 下实际存在的目录 ==="
             ls -1 /opt/python
             exit 1
           fi
           PYTHON_BIN="${PYTHON_DIR}/bin"
           echo "✅ 使用解释器路径: ${PYTHON_BIN}"
-
+  
           ${PYTHON_BIN}/pip install --upgrade pip
           ${PYTHON_BIN}/pip install maturin==1.9.2 twine
-
+  
           OUTPUT_DIR="/tmp/wheels/linux-py${PYTHON_VERSION}"
           mkdir -p $OUTPUT_DIR
-
+  
           cargo clean
           ${PYTHON_BIN}/maturin build \
             --release \
@@ -61,21 +62,31 @@ jobs:
             --interpreter ${PYTHON_BIN}/python \
             --out $OUTPUT_DIR
 
+      - name: List built wheels
+        shell: bash
+        run: |
+          PYTHON_VERSION=${{ matrix.python-version }}
+          OUTPUT_DIR="/tmp/wheels/linux-py${PYTHON_VERSION}"
+          echo "=== 列出 $OUTPUT_DIR 下的文件 ==="
+          ls -lh $OUTPUT_DIR
+
       - name: Verify wheel integrity
         shell: bash
         run: |
           PYTHON_VERSION=${{ matrix.python-version }}
           PYTHON_TAG="cp${PYTHON_VERSION/./}-cp${PYTHON_VERSION/./}"
-
-          PYTHON_DIR=$(find /opt/python -maxdepth 1 -type d -name "${PYTHON_TAG}*" | head -1)
+  
+          # 同样匹配 cpXXX-cpXXX 或 cpXXX-cpXXXt
+          PYTHON_DIR=$(find /opt/python -maxdepth 1 -type d -regex ".*/${PYTHON_TAG}t?$" | head -1)
           if [[ -z "$PYTHON_DIR" ]]; then
-            echo "❌ 没找到解释器目录 /opt/python/${PYTHON_TAG}*"
+            echo "❌ 没找到解释器目录 (尝试匹配 cpXXX-cpXXX 和 cpXXX-cpXXXt)"
             ls -1 /opt/python
             exit 1
           fi
           PYTHON_BIN="${PYTHON_DIR}/bin"
-
+  
           OUTPUT_DIR="/tmp/wheels/linux-py${PYTHON_VERSION}"
+          echo "=== 使用 ${PYTHON_BIN} 验证 wheel ==="
           ${PYTHON_BIN}/python -m twine check $OUTPUT_DIR/*.whl
 
       - name: Upload Linux wheels
