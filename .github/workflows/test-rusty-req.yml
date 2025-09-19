@@ -3,49 +3,52 @@ name: Test rusty-req installation on multiple platforms
 on:
   workflow_dispatch:
     inputs:
-      python-versions:
-        description: 'Python versions (comma separated)'
+      python-version:
+        description: 'Python version to test'
         required: true
-        default: '3.9,3.10,3.11'
-      platforms:
-        description: 'Platforms to test'
-        required: true
-        default: 'all'
+        default: '3.10'
         type: choice
         options:
-          - 'all'
-          - 'ubuntu-only'
-          - 'windows-only'
-          - 'macos-only'
+          - '3.8'
+          - '3.9'
+          - '3.10'
+          - '3.11'
+          - '3.12'
+      platform:
+        description: 'Platform to test'
+        required: true
+        default: 'ubuntu-latest'
+        type: choice
+        options:
+          - 'ubuntu-latest'
+          - 'windows-latest'
+          - 'macos-latest'
+          - 'all-platforms'
 
 jobs:
   test-installation:
-    runs-on: ${{ matrix.os }}
+    runs-on: ${{ matrix.os || github.event.inputs.platform }}
     strategy:
-      matrix:
-        os:
-          ${{
-          inputs.platforms == 'all' && '["ubuntu-latest", "windows-latest", "macos-latest"]' ||
-          inputs.platforms == 'ubuntu-only' && '["ubuntu-latest"]' ||
-          inputs.platforms == 'windows-only' && '["windows-latest"]' ||
-          inputs.platforms == 'macos-only' && '["macos-latest"]'
-          }}
-        python-version: ${{ inputs.python-versions }}
+      ${{ github.event.inputs.platform == 'all-platforms' && 'matrix' || '' }}:
+        ${{ github.event.inputs.platform == 'all-platforms' && 'matrix' || '' }}:
+          os: [ubuntu-latest, windows-latest, macos-latest]
+          python-version: [${{ github.event.inputs.python-version }}]
 
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Set up Python ${{ matrix.python-version }}
+      - name: Set up Python ${{ matrix.python-version || github.event.inputs.python-version }}
         uses: actions/setup-python@v5
         with:
-          python-version: ${{ matrix.python-version }}
+          python-version: ${{ matrix.python-version || github.event.inputs.python-version }}
 
       - name: Display platform info
         run: |
-          echo "Running on: ${{ matrix.os }}"
-          echo "Python version: ${{ matrix.python-version }}"
+          echo "Running on: ${{ matrix.os || github.event.inputs.platform }}"
+          echo "Python version: ${{ matrix.python-version || github.event.inputs.python-version }}"
           python --version
+          python -c "import platform; print(f'Platform: {platform.platform()}')"
 
       - name: Install rusty-req
         run: |
