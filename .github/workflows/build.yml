@@ -68,10 +68,11 @@ jobs:
       - name: Install system dependencies (Linux)
         if: matrix.os == 'ubuntu-latest'
         run: |
-          # manylinux 容器里用 yum 安装 OpenSSL dev
-          sudo yum install -y openssl-devel pkgconfig
-          echo "OPENSSL_DIR=/opt/_internal/openssl" >> $GITHUB_ENV
-          echo "PKG_CONFIG_PATH=/opt/_internal/openssl/lib/pkgconfig" >> $GITHUB_ENV
+          sudo apt-get update
+          sudo apt-get install -y libssl-dev pkg-config
+          # 设置环境变量给 Rust 编译使用
+          echo "OPENSSL_DIR=/usr" >> $GITHUB_ENV
+          echo "PKG_CONFIG_PATH=/usr/lib/x86_64-linux-gnu/pkgconfig" >> $GITHUB_ENV
 
       - name: Install system dependencies (macOS)
         if: matrix.os == 'macos-latest'
