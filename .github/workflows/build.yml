@@ -123,11 +123,19 @@ jobs:
           CIBW_ARCHS_LINUX: "x86_64"
           CIBW_ARCHS_WINDOWS: "AMD64"
           CIBW_MANYLINUX_X86_64_IMAGE: "manylinux_2_28"
-          # 给容器传 OpenSSL 路径
           CIBW_ENVIRONMENT: |
+            # Linux (manylinux 容器)
             OPENSSL_DIR=/usr
             PKG_CONFIG_PATH=/usr/lib/x86_64-linux-gnu/pkgconfig
+        
+            # macOS
             MACOSX_DEPLOYMENT_TARGET=10.12
+            OPENSSL_DIR=$(brew --prefix openssl)
+            PKG_CONFIG_PATH=$(brew --prefix openssl)/lib/pkgconfig
+        
+            # Windows
+            OPENSSL_DIR="C:\Program Files\OpenSSL-Win64"
+            PKG_CONFIG_PATH="C:\Program Files\OpenSSL-Win64\lib\pkgconfig"
           CIBW_BUILD_COMMAND: "maturin build --release --interpreter python"
           CIBW_REPAIR_WHEEL_COMMAND_LINUX: "python -m auditwheel repair -w {dest_dir} {wheel}"
 
