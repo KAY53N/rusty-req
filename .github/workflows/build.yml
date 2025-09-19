@@ -124,7 +124,6 @@ jobs:
           name: wheels-windows-py${{ matrix.python-version }}
           path: dist/windows-py${{ matrix.python-version }}/*.whl
 
-
   publish:
     needs: [build-linux, build-macos, build-windows]
     runs-on: ubuntu-latest
@@ -157,14 +156,12 @@ jobs:
       - name: Install twine
         run: pip install twine
 
-      - name: Verify and Upload wheels per Python version
+      - name: Verify and Upload wheels
         run: |
-          for platform_dir in artifacts/*/*; do
-            echo "处理目录: $platform_dir"
-            for whl in "$platform_dir"/*.whl; do
-              echo "检查 wheel: $whl"
-              twine check "$whl"
-              echo "上传 wheel: $whl"
-              twine upload --skip-existing "$whl"
-            done
+          for whl in artifacts/*/*/*.whl; do
+            echo "检查 wheel: $whl"
+            twine check "$whl"
+            echo "上传 wheel: $whl"
+            twine upload --skip-existing "$whl"
           done
+
