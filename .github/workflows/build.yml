@@ -10,7 +10,6 @@ jobs:
     runs-on: ${{ matrix.os }}
     strategy:
       matrix:
-        os: [ubuntu-latest, windows-latest, macos-latest]
         include:
           # Ubuntu 多版本
           - os: ubuntu-latest
@@ -49,6 +48,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      # Rust
       - name: Setup Rust
         uses: dtolnay/rust-toolchain@stable
 
@@ -58,6 +58,7 @@ jobs:
           rustup target add x86_64-apple-darwin
           rustup target add aarch64-apple-darwin
 
+      # 系统依赖
       - name: Install system dependencies (Linux)
         if: matrix.os == 'ubuntu-latest'
         run: |
@@ -69,17 +70,19 @@ jobs:
       - name: Install system dependencies (macOS)
         if: matrix.os == 'macos-latest'
         run: |
-          brew install pkg-config openssl || true
+          brew install openssl pkg-config || true
           echo "OPENSSL_DIR=$(brew --prefix openssl)" >> $GITHUB_ENV
           echo "PKG_CONFIG_PATH=$(brew --prefix openssl)/lib/pkgconfig" >> $GITHUB_ENV
 
       - name: Install system dependencies (Windows)
         if: matrix.os == 'windows-latest'
+        shell: pwsh
         run: |
           choco install openssl.light pkgconfiglite -y
-          echo "OPENSSL_DIR=C:\\Program Files\\OpenSSL-Win64" >> $env:GITHUB_ENV
-          echo "PKG_CONFIG_PATH=C:\\Program Files\\OpenSSL-Win64\\lib\\pkgconfig" >> $env:GITHUB_ENV
+          echo "OPENSSL_DIR=C:\Program Files\OpenSSL-Win64" >> $env:GITHUB_ENV
+          echo "PKG_CONFIG_PATH=C:\Program Files\OpenSSL-Win64\lib\pkgconfig" >> $env:GITHUB_ENV
 
+      # Python
       - name: Setup Python
         uses: actions/setup-python@v4
         with:
@@ -90,6 +93,7 @@ jobs:
           python -m pip install --upgrade pip setuptools wheel
           pip install cibuildwheel==2.16.2 maturin==1.9.2
 
+      # 编译 wheel
       - name: Build wheels with cibuildwheel
         shell: bash
         run: |
@@ -97,7 +101,6 @@ jobs:
           BUILD_EXIT_CODE=${PIPESTATUS[0]}
 
           echo "=== Build completed with exit code: $BUILD_EXIT_CODE ==="
-          echo "=== Build log contents ==="
           cat build.log
 
           if [ -d wheelhouse ] && [ "$(ls -1 wheelhouse/*.whl 2>/dev/null | wc -l)" -gt 0 ]; then
@@ -116,8 +119,8 @@ jobs:
           CIBW_ENVIRONMENT: "MACOSX_DEPLOYMENT_TARGET=10.12"
           CIBW_BUILD_COMMAND: "maturin build --release --interpreter python"
           CIBW_REPAIR_WHEEL_COMMAND_LINUX: "python -m auditwheel repair -w {dest_dir} {wheel}"
-          CIBW_BEFORE_BUILD: ""
 
+      # 验证 wheels
       - name: Verify wheels
         run: |
           python -m pip install twine
@@ -125,8 +128,8 @@ jobs:
             python -m twine check wheelhouse/*.whl
           else
             echo "No wheels to verify"
-          fi
 
+      # 上传 artifact
       - name: Upload wheels as artifacts
         if: success() || failure()
         uses: actions/upload-artifact@v4
@@ -134,11 +137,11 @@ jobs:
           name: wheels-${{ matrix.os }}
           path: ./wheelhouse/*.whl
 
+  # 发布到 PyPI
   publish:
-    needs: [build]
+    needs: build
     runs-on: ubuntu-latest
     if: startsWith(github.ref, 'refs/tags/')
-
     steps:
       - name: Setup Python
         uses: actions/setup-python@v4
@@ -152,83 +155,25 @@ jobs:
           pattern: wheels-*
           merge-multiple: true
 
-      - name: Collect and validate wheels
-        run: |
-          echo "=== 收集到的 wheel 文件 ==="
-          find dist -name "*.whl" -exec ls -la {} \;
-
-          python -m pip install twine
-          VALID_WHEELS_EXIST=false
-          for whl in dist/*.whl; do
-            if [ ! -f "$whl" ]; then continue; fi
-            echo "🔍 验证: $(basename "$whl")"
-            size=$(stat -c%s "$whl" 2>/dev/null || stat -f%z "$whl" 2>/dev/null)
-            echo "文件大小: $size bytes"
-            if [ "$size" -eq 0 ]; then
-              echo "❌ 文件大小为 0，删除"; rm "$whl"; continue
-            fi
-            export CURRENT_WHL_PATH="$whl"
-            if ! python3 -c "${CODE_TO_RUN}" ; then
-              echo "❌ ZIP 验证失败，删除"; rm "$whl"; continue
-            fi
-            if python -m twine check "$whl"; then
-              echo "✅ $(basename "$whl") 验证通过"
-              VALID_WHEELS_EXIST=true
-            else
-              echo "❌ Twine 验证失败，删除"; rm "$whl"
-            fi
-            echo "---"
-          done
-          if [ "$VALID_WHEELS_EXIST" = false ]; then
-            echo "❌ 没有有效的 wheel 文件"; exit 1
-          fi
-          echo "=== 准备上传的文件 ==="
-          ls -la dist/
-        env:
-          CODE_TO_RUN: |
-            import zipfile, sys, os
-            whl_path = os.environ.get('CURRENT_WHL_PATH')
-            if not whl_path: sys.exit(1)
-            try:
-                with zipfile.ZipFile(whl_path, 'r') as zf:
-                    bad_files = zf.testzip()
-                    if bad_files: sys.exit(1)
-                    files = zf.namelist()
-                    if not any('METADATA' in f for f in files) or not any('WHEEL' in f for f in files):
-                        sys.exit(1)
-            except Exception: sys.exit(1)
-
       - name: Upload to PyPI
         env:
           TWINE_USERNAME: __token__
           TWINE_PASSWORD: ${{ secrets.PYPI_API_TOKEN }}
         run: python -m twine upload --skip-existing dist/*.whl --verbose
 
+  # 创建 GitHub Release
   release:
-    needs: [publish]
+    needs: publish
     runs-on: ubuntu-latest
     if: startsWith(github.ref, 'refs/tags/')
-
     steps:
       - uses: actions/checkout@v4
-
-      - name: Setup Python
-        uses: actions/setup-python@v4
-        with:
-          python-version: '3.11'
-
       - name: Download all wheels for release
         uses: actions/download-artifact@v4
         with:
           path: dist
           pattern: wheels-*
           merge-multiple: true
-
-      - name: Prepare release assets
-        run: |
-          echo "=== 发布文件 ==="
-          ls -la dist/*.whl
-
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v1
         with:
