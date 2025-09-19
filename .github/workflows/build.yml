@@ -22,19 +22,19 @@ jobs:
           - os: ubuntu-latest
             python-version: "3.9"
             manylinux: 2_28
-            target: x86_64
+            target: x86_64-unknown-linux-gnu
           - os: ubuntu-latest
             python-version: "3.10"
             manylinux: 2_28
-            target: x86_64
+            target: x86_64-unknown-linux-gnu
           - os: ubuntu-latest
             python-version: "3.11"
             manylinux: 2_28
-            target: x86_64
+            target: x86_64-unknown-linux-gnu
           - os: ubuntu-latest
             python-version: "3.12"
             manylinux: 2_28
-            target: x86_64
+            target: x86_64-unknown-linux-gnu
           - os: macos-latest
             python-version: "3.9"
             target: x86_64-apple-darwin
