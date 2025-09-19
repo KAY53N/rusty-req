@@ -141,28 +141,22 @@ jobs:
     
     steps:
       - uses: actions/checkout@v4
-
+  
       - name: Download all artifacts
         uses: actions/download-artifact@v4
         with:
           path: dist
           pattern: wheels-*
           merge-multiple: true
-
+  
       - name: List downloaded wheels
         run: find dist -name "*.whl" | xargs ls -la
-
-      - name: Install twine
-        run: pip install twine
-
-      - name: Publish to PyPI
-        run: |
-          echo "上传所有 wheel 文件到 PyPI..."
-          find dist -type f -name "*.whl" | while read whl; do
-            echo "检查并上传: $whl"
-            twine check "$whl" || exit 1
-            twine upload --skip-existing "$whl" || exit 1
-          done
+  
+      - name: Publish using maturin-action
+        uses: messense/maturin-action@v1
+        with:
+          maturin-version: latest
+          command: upload
+          args: --skip-existing --username __token__ --password ${{ secrets.PYPI_TOKEN }}
         env:
-          TWINE_USERNAME: __token__
-          TWINE_PASSWORD: ${{ secrets.PYPI_TOKEN }}
+          MATURIN_PASSWORD: ${{ secrets.PYPI_TOKEN }}
