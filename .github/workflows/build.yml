@@ -66,13 +66,18 @@ jobs:
         shell: bash
         run: |
           source ~/.bashrc
+          
           PYTHON_VERSION=${{ matrix.python-version }}
           PYTHON_TAG="cp${PYTHON_VERSION/./}-cp${PYTHON_VERSION/./}"
+          
+          # 找到对应的 Python 解释器
           PYTHON_DIR=$(find /opt/python -name "${PYTHON_TAG}*" -type d | head -1)
           PYTHON_BIN="${PYTHON_DIR}/bin"
           
           OUTPUT_DIR="/tmp/wheels/linux-py${{ matrix.python-version }}"
-          ${PYTHON_BIN}/twine check $OUTPUT_DIR/*.whl
+          
+          # 使用 Python 模块方式运行 twine（更可靠）
+          ${PYTHON_BIN}/python -m twine check $OUTPUT_DIR/*.whl
 
       - name: Upload Linux wheels
         uses: actions/upload-artifact@v4
