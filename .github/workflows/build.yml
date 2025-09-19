@@ -97,12 +97,19 @@ jobs:
       - name: Build wheels with cibuildwheel
         shell: bash
         run: |
+          # 对 Linux 主机（manylinux 容器）安装必要依赖
+          if [[ "$RUNNER_OS" == "Linux" ]]; then
+            sudo apt-get update
+            sudo apt-get install -y pkg-config libssl-dev
+          fi
+          
+          # 执行 cibuildwheel
           cibuildwheel --output-dir wheelhouse . 2>&1 | tee build.log
           BUILD_EXIT_CODE=${PIPESTATUS[0]}
-
+          
           echo "=== Build completed with exit code: $BUILD_EXIT_CODE ==="
           cat build.log
-
+          
           if [ -d wheelhouse ] && [ "$(ls -1 wheelhouse/*.whl 2>/dev/null | wc -l)" -gt 0 ]; then
             echo "✅ Wheels generated successfully"
             exit 0
@@ -116,7 +123,11 @@ jobs:
           CIBW_ARCHS_LINUX: "x86_64"
           CIBW_ARCHS_WINDOWS: "AMD64"
           CIBW_MANYLINUX_X86_64_IMAGE: "manylinux_2_28"
-          CIBW_ENVIRONMENT: "MACOSX_DEPLOYMENT_TARGET=10.12"
+          # 给容器传 OpenSSL 路径
+          CIBW_ENVIRONMENT: |
+            OPENSSL_DIR=/usr
+            PKG_CONFIG_PATH=/usr/lib/x86_64-linux-gnu/pkgconfig
+            MACOSX_DEPLOYMENT_TARGET=10.12
           CIBW_BUILD_COMMAND: "maturin build --release --interpreter python"
           CIBW_REPAIR_WHEEL_COMMAND_LINUX: "python -m auditwheel repair -w {dest_dir} {wheel}"
 
