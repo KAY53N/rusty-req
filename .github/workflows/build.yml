@@ -24,17 +24,29 @@ jobs:
           rustup target add x86_64-apple-darwin
           rustup target add aarch64-apple-darwin
 
-      - name: Install system dependencies (Linux)
-        if: matrix.os == 'ubuntu-latest'
+      - name: Install system dependencies
         run: |
-          sudo apt-get update
-          sudo apt-get install -y pkg-config libssl-dev
+          if [ "$RUNNER_OS" == "Linux" ]; then
+            sudo apt-get update
+            sudo apt-get install -y pkg-config libssl-dev
+          elif [ "$RUNNER_OS" == "macOS" ]; then
+            # 确保 macOS 有必要的工具
+            brew install pkg-config || true
+          fi
 
-      - name: Build wheels using cibuildwheel
-        uses: pypa/cibuildwheel@v2.16.2
+      - name: Setup Python
+        uses: actions/setup-python@v4
         with:
-          output-dir: wheelhouse
-          config-file: ""
+          python-version: '3.11'
+
+      - name: Install build tools
+        run: |
+          python -m pip install --upgrade pip setuptools wheel
+          pip install cibuildwheel==2.16.2 maturin==1.9.2
+
+      - name: Build wheels with cibuildwheel
+        run: |
+          cibuildwheel --output-dir wheelhouse .
         env:
           CIBW_BUILD: "cp39-* cp310-* cp311-* cp312-* cp313-*"
           CIBW_SKIP: "*-musllinux_* pp*"
@@ -46,10 +58,14 @@ jobs:
             pip install --upgrade pip setuptools wheel
             pip install maturin==1.9.2
           CIBW_BEFORE_BUILD_LINUX: |
-            dnf install -y openssl-devel pkgconfig || yum install -y openssl-devel pkgconfig || apt-get update && apt-get install -y pkg-config libssl-dev
+            sudo apt-get update
+            sudo apt-get install -y pkg-config libssl-dev
             pip install --upgrade pip setuptools wheel
             pip install maturin==1.9.2
           CIBW_BEFORE_BUILD_WINDOWS: |
+            pip install --upgrade pip setuptools wheel
+            pip install maturin==1.9.2
+          CIBW_BEFORE_BUILD_MACOS: |
             pip install --upgrade pip setuptools wheel
             pip install maturin==1.9.2
           CIBW_ENVIRONMENT_MACOS: "MACOSX_DEPLOYMENT_TARGET=10.12"
@@ -73,6 +89,11 @@ jobs:
     if: startsWith(github.ref, 'refs/tags/')
 
     steps:
+      - name: Setup Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.11'
+
       - name: Download all wheels
         uses: actions/download-artifact@v4
         with:
@@ -164,6 +185,11 @@ jobs:
 
     steps:
       - uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.11'
 
       - name: Download all wheels for release
         uses: actions/download-artifact@v4
