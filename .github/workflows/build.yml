@@ -90,13 +90,21 @@ jobs:
       - name: Install maturin
         run: pip install maturin
 
-      - name: Build wheel
+      - name: Build wheel (Linux/macOS)
+        if: runner.os != 'Windows'
+        shell: bash
         run: |
           if [ "$RUNNER_OS" = "Linux" ]; then
             maturin build --release --manylinux ${{ matrix.manylinux }} --interpreter python --out dist
           else
             maturin build --release --target ${{ matrix.target }} --interpreter python --out dist
           fi
+
+      - name: Build wheel (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          maturin build --release --target ${{ matrix.target }} --interpreter python --out dist
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
