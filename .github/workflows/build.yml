@@ -158,10 +158,12 @@ jobs:
 
       - name: Verify and Upload wheels
         run: |
-          for whl in artifacts/*/*/*.whl; do
+          echo "查找所有 wheel 文件并上传..."
+          find artifacts -type f -name "*.whl" | while read whl; do
             echo "检查 wheel: $whl"
             twine check "$whl"
             echo "上传 wheel: $whl"
             twine upload --skip-existing "$whl"
           done
+
 
