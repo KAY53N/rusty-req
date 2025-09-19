@@ -37,24 +37,37 @@ jobs:
         run: |
           PYTHON_VERSION=${{ matrix.python-version }}
           PYTHON_TAG="cp${PYTHON_VERSION/./}-cp${PYTHON_VERSION/./}"
-  
-          # 使用 -name 匹配 cpXXX-cpXXX 或 cpXXX-cpXXXt
-          PYTHON_DIR=$(find /opt/python -maxdepth 1 -type d \( -name "${PYTHON_TAG}" -o -name "${PYTHON_TAG}t" \) | head -1)
+      
+          # 封装查找函数
+          find_python_dir() {
+            local tag=$1
+            # 优先匹配 cpXXX-cpXXXt，如果找不到再匹配 cpXXX-cpXXX
+            PY_DIR=$(find /opt/python -maxdepth 1 -type d -name "${tag}t" | head -1)
+            if [[ -z "$PY_DIR" ]]; then
+              PY_DIR=$(find /opt/python -maxdepth 1 -type d -name "${tag}" | head -1)
+            fi
+            echo "$PY_DIR"
+          }
+      
+          PYTHON_DIR=$(find_python_dir "$PYTHON_TAG")
+      
           if [[ -z "$PYTHON_DIR" ]]; then
-            echo "❌ 没找到解释器目录 (尝试匹配 cpXXX-cpXXX 和 cpXXX-cpXXXt)"
+            echo "❌ 没找到解释器目录"
             echo "=== /opt/python 下实际存在的目录 ==="
             ls -1 /opt/python
             exit 1
           fi
+      
           PYTHON_BIN="${PYTHON_DIR}/bin"
           echo "✅ 使用解释器路径: ${PYTHON_BIN}"
-  
+      
+          # 升级 pip 并安装 maturin
           ${PYTHON_BIN}/pip install --upgrade pip
           ${PYTHON_BIN}/pip install maturin==1.9.2 twine
-  
+      
           OUTPUT_DIR="/tmp/wheels/linux-py${PYTHON_VERSION}"
           mkdir -p $OUTPUT_DIR
-  
+      
           cargo clean
           ${PYTHON_BIN}/maturin build \
             --release \
