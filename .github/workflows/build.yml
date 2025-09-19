@@ -38,9 +38,10 @@ jobs:
           PYTHON_VERSION=${{ matrix.python-version }}
           PYTHON_TAG="cp${PYTHON_VERSION/./}-cp${PYTHON_VERSION/./}"
 
-          PYTHON_DIR=$(find /opt/python -maxdepth 1 -type d -name "${PYTHON_TAG}*")
+          PYTHON_DIR=$(find /opt/python -maxdepth 1 -type d -name "${PYTHON_TAG}*" | head -1)
           if [[ -z "$PYTHON_DIR" ]]; then
             echo "❌ 没找到解释器目录 /opt/python/${PYTHON_TAG}*"
+            echo "=== /opt/python 下实际存在的目录 ==="
             ls -1 /opt/python
             exit 1
           fi
@@ -66,11 +67,15 @@ jobs:
           PYTHON_VERSION=${{ matrix.python-version }}
           PYTHON_TAG="cp${PYTHON_VERSION/./}-cp${PYTHON_VERSION/./}"
 
-          PYTHON_DIR=$(find /opt/python -name "${PYTHON_TAG}*" -type d | head -1)
+          PYTHON_DIR=$(find /opt/python -maxdepth 1 -type d -name "${PYTHON_TAG}*" | head -1)
+          if [[ -z "$PYTHON_DIR" ]]; then
+            echo "❌ 没找到解释器目录 /opt/python/${PYTHON_TAG}*"
+            ls -1 /opt/python
+            exit 1
+          fi
           PYTHON_BIN="${PYTHON_DIR}/bin"
 
           OUTPUT_DIR="/tmp/wheels/linux-py${PYTHON_VERSION}"
-
           ${PYTHON_BIN}/python -m twine check $OUTPUT_DIR/*.whl
 
       - name: Upload Linux wheels
