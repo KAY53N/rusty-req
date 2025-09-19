@@ -116,7 +116,7 @@ jobs:
         run: pip install --upgrade maturin twine
 
       - name: Build abi3 wheel (Windows 不加 --strip)
-        run: maturin build --release --compatibility abi3
+        run: maturin build --release abi3
 
       - name: Verify wheel with twine
         shell: pwsh
