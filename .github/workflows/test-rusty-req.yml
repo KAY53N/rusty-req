@@ -26,27 +26,69 @@ on:
           - 'all-platforms'
 
 jobs:
-  test-installation:
-    runs-on: ${{ matrix.os || github.event.inputs.platform }}
+  # 多平台 job
+  test-all:
+    if: ${{ github.event.inputs.platform == 'all-platforms' }}
+    runs-on: ${{ matrix.os }}
     strategy:
-      ${{ github.event.inputs.platform == 'all-platforms' && 'matrix' || '' }}:
-        ${{ github.event.inputs.platform == 'all-platforms' && 'matrix' || '' }}:
-          os: [ubuntu-latest, windows-latest, macos-latest]
-          python-version: [${{ github.event.inputs.python-version }}]
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+        python-version: ["3.8", "3.9", "3.10", "3.11", "3.12"]
 
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Set up Python ${{ matrix.python-version || github.event.inputs.python-version }}
+      - name: Set up Python
         uses: actions/setup-python@v5
         with:
-          python-version: ${{ matrix.python-version || github.event.inputs.python-version }}
+          python-version: ${{ matrix.python-version }}
 
       - name: Display platform info
         run: |
-          echo "Running on: ${{ matrix.os || github.event.inputs.platform }}"
-          echo "Python version: ${{ matrix.python-version || github.event.inputs.python-version }}"
+          echo "Running on: ${{ matrix.os }}"
+          echo "Python version: ${{ matrix.python-version }}"
+          python --version
+          python -c "import platform; print(f'Platform: {platform.platform()}')"
+
+      - name: Install rusty-req
+        run: |
+          pip install --upgrade pip
+          pip install rusty-req --no-cache-dir
+
+      - name: Verify installation
+        run: |
+          python -c "
+          try:
+              import rusty_req
+              print('✅ rusty-req imported successfully')
+              print(f'Version: {rusty_req.__version__}')
+          except ImportError as e:
+              print(f'❌ Import failed: {e}')
+              exit(1)
+          except Exception as e:
+              print(f'⚠️ Error: {e}')
+              exit(1)
+          "
+
+  # 单平台 job
+  test-single:
+    if: ${{ github.event.inputs.platform != 'all-platforms' }}
+    runs-on: ${{ github.event.inputs.platform }}
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ github.event.inputs.python-version }}
+
+      - name: Display platform info
+        run: |
+          echo "Running on: ${{ github.event.inputs.platform }}"
+          echo "Python version: ${{ github.event.inputs.python-version }}"
           python --version
           python -c "import platform; print(f'Platform: {platform.platform()}')"
 
