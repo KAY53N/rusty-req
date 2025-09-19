@@ -115,8 +115,8 @@ jobs:
       - name: Install maturin & twine
         run: pip install --upgrade maturin twine
 
-      - name: Build wheel
-        run: maturin build --release --interpreter python --strip
+      - name: Build abi3 wheel
+        run: maturin build --release --compatibility=abi3 --strip
 
       - name: Verify wheel
         # 使用 PowerShell 语法遍历 wheel 文件
