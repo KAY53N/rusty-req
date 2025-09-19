@@ -4,6 +4,8 @@ on:
   push:
     tags:
       - 'v*'
+  release:
+    types: [created]
   workflow_dispatch:
     inputs:
       version:
@@ -12,158 +14,117 @@ on:
         default: ""
 
 jobs:
-  build-linux:
-    runs-on: ubuntu-latest
+  build-and-publish:
+    runs-on: ${{ matrix.os }}
     strategy:
       matrix:
-        python-version: ["3.9", "3.10", "3.11", "3.12"]
-    container:
-      image: quay.io/pypa/manylinux_2_28_x86_64
+        include:
+          - os: ubuntu-latest
+            python-version: "3.9"
+            manylinux: 2_28
+            target: x86_64
+          - os: ubuntu-latest
+            python-version: "3.10"
+            manylinux: 2_28
+            target: x86_64
+          - os: ubuntu-latest
+            python-version: "3.11"
+            manylinux: 2_28
+            target: x86_64
+          - os: ubuntu-latest
+            python-version: "3.12"
+            manylinux: 2_28
+            target: x86_64
+          - os: macos-latest
+            python-version: "3.9"
+            target: x86_64-apple-darwin
+          - os: macos-latest
+            python-version: "3.10"
+            target: x86_64-apple-darwin
+          - os: macos-latest
+            python-version: "3.11"
+            target: x86_64-apple-darwin
+          - os: macos-latest
+            python-version: "3.12"
+            target: x86_64-apple-darwin
+          - os: macos-latest
+            python-version: "3.9"
+            target: aarch64-apple-darwin
+          - os: macos-latest
+            python-version: "3.10"
+            target: aarch64-apple-darwin
+          - os: macos-latest
+            python-version: "3.11"
+            target: aarch64-apple-darwin
+          - os: macos-latest
+            python-version: "3.12"
+            target: aarch64-apple-darwin
+          - os: windows-latest
+            python-version: "3.9"
+            target: x86_64-pc-windows-msvc
+          - os: windows-latest
+            python-version: "3.10"
+            target: x86_64-pc-windows-msvc
+          - os: windows-latest
+            python-version: "3.11"
+            target: x86_64-pc-windows-msvc
+          - os: windows-latest
+            python-version: "3.12"
+            target: x86_64-pc-windows-msvc
+
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout
+        uses: actions/checkout@v4
 
-      - name: Install system dependencies
-        run: |
-          dnf install -y openssl-devel pkgconfig
+      - name: Setup Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: ${{ matrix.python-version }}
 
-      - name: Install Rust
+      - name: Setup Rust
         uses: dtolnay/rust-toolchain@stable
         with:
           toolchain: stable
-      - run: echo "$HOME/.cargo/bin" >> $GITHUB_PATH
-
-      - name: Set up Python & Build Wheel
-        shell: bash
-        run: |
-          set -euxo pipefail
-          PYTHON_VERSION=${{ matrix.python-version }}
-          PYTHON_TAG="cp${PYTHON_VERSION//./}-cp${PYTHON_VERSION//./}"
-          PYTHON_DIR=""
-          for dir in /opt/python/*; do
-              base=$(basename "$dir")
-              if [[ "$base" == "${PYTHON_TAG}t" ]]; then
-                  PYTHON_DIR="$dir"
-                  break
-              elif [[ "$base" == "$PYTHON_TAG" ]]; then
-                  PYTHON_DIR="$dir"
-              fi
-          done
-          if [[ -z "$PYTHON_DIR" ]]; then
-              echo "❌ 没找到解释器目录"; ls -1 /opt/python; exit 1
-          fi
-          PYTHON_BIN="${PYTHON_DIR}/bin"
-          $PYTHON_BIN/pip install --upgrade pip maturin==1.9.2 twine
-          OUTPUT_DIR="/tmp/wheels/linux-py${PYTHON_VERSION}"
-          mkdir -p "$OUTPUT_DIR"
-          cargo clean
-          $PYTHON_BIN/maturin build --release --manylinux 2_28 --interpreter $PYTHON_BIN/python --out "$OUTPUT_DIR"
-
-      - name: Upload Linux wheels
-        uses: actions/upload-artifact@v4
-        with:
-          name: wheels-linux-py${{ matrix.python-version }}
-          path: /tmp/wheels/linux-py${{ matrix.python-version }}/*.whl
-
-
-  build-macos:
-    runs-on: macos-latest
-    strategy:
-      matrix:
-        python-version: ["3.9", "3.10", "3.11", "3.12"]
-        target: ["x86_64-apple-darwin", "aarch64-apple-darwin"]
-      max-parallel: 3
-    steps:
-      - uses: actions/checkout@v4
-      - name: Setup Rust
-        uses: dtolnay/rust-toolchain@stable
-        with:
           targets: ${{ matrix.target }}
-      - name: Setup Python
-        uses: actions/setup-python@v4
-        with:
-          python-version: ${{ matrix.python-version }}
-      - name: Install maturin and twine
-        run: pip install maturin twine
+
+      - name: Install maturin
+        run: pip install maturin
+
       - name: Build wheel
         run: |
-          OUTPUT_DIR="dist/macos-${{ matrix.target }}-py${{ matrix.python-version }}"
-          mkdir -p $OUTPUT_DIR
-          cargo clean
-          maturin build --release --target ${{ matrix.target }} --interpreter python --out $OUTPUT_DIR
-      - name: Upload macOS wheels
+          if [ "$RUNNER_OS" = "Linux" ]; then
+            maturin build --release --manylinux ${{ matrix.manylinux }} --interpreter python --out dist
+          else
+            maturin build --release --target ${{ matrix.target }} --interpreter python --out dist
+          fi
+
+      - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
-          name: wheels-macos-${{ matrix.target }}-py${{ matrix.python-version }}
-          path: dist/macos-${{ matrix.target }}-py${{ matrix.python-version }}/*.whl
-
-
-  build-windows:
-    runs-on: windows-latest
-    strategy:
-      matrix:
-        python-version: ["3.9", "3.10", "3.11", "3.12"]
-    steps:
-      - uses: actions/checkout@v4
-      - name: Setup Rust
-        uses: dtolnay/rust-toolchain@stable
-      - name: Setup Python
-        uses: actions/setup-python@v4
-        with:
-          python-version: ${{ matrix.python-version }}
-      - name: Install maturin and twine
-        run: pip install maturin twine
-      - name: Build wheel
-        run: |
-          $OUTPUT_DIR = "dist\windows-py${{ matrix.python-version }}"
-          New-Item -ItemType Directory -Path $OUTPUT_DIR -Force
-          cargo clean
-          maturin build --release --interpreter python --out $OUTPUT_DIR
-      - name: Upload Windows wheels
-        uses: actions/upload-artifact@v4
-        with:
-          name: wheels-windows-py${{ matrix.python-version }}
-          path: dist/windows-py${{ matrix.python-version }}/*.whl
+          name: wheel-${{ matrix.os }}-py${{ matrix.python-version }}-${{ matrix.target }}
+          path: dist/*.whl
 
   publish:
-    needs: [build-linux, build-macos, build-windows]
+    needs: build-and-publish
     runs-on: ubuntu-latest
-    if: startsWith(github.ref, 'refs/tags/')
+    if: success() && (startsWith(github.ref, 'refs/tags/') || github.event_name == 'release')
+    
     steps:
-      - uses: actions/checkout@v4
-
-      # 下载 artifacts
-      - name: Download Linux artifacts
+      - name: Download all artifacts
         uses: actions/download-artifact@v4
         with:
-          path: artifacts/linux
-          pattern: wheels-linux-*
+          path: dist
+          pattern: wheel-*
           merge-multiple: true
 
-      - name: Download macOS artifacts
-        uses: actions/download-artifact@v4
+      - name: List downloaded wheels
+        run: find dist -name "*.whl" | xargs ls -la
+
+      - name: Publish to PyPI
+        uses: messense/maturin-action@v1
         with:
-          path: artifacts/macos
-          pattern: wheels-macos-*
-          merge-multiple: true
-
-      - name: Download Windows artifacts
-        uses: actions/download-artifact@v4
-        with:
-          path: artifacts/windows
-          pattern: wheels-windows-*
-          merge-multiple: true
-
-      - name: Install twine
-        run: pip install twine
-
-      - name: Verify and Upload wheels
-        run: |
-          echo "查找所有 wheel 文件并上传..."
-          find artifacts -type f -name "*.whl" | while read whl; do
-            echo "检查 wheel: $whl"
-            twine check "$whl"
-            echo "上传 wheel: $whl"
-            twine upload --skip-existing "$whl"
-          done
-
-
+          maturin-version: latest
+          command: publish
+          args: --no-sdist --skip-existing
+        env:
+          MATURIN_PASSWORD: ${{ secrets.PYPI_TOKEN }}
