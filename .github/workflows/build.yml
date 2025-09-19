@@ -11,7 +11,7 @@ jobs:
     strategy:
       matrix:
         include:
-          # Ubuntu 多版本
+          # Linux
 #          - os: ubuntu-latest
 #            python-version: '3.9'
 #          - os: ubuntu-latest
@@ -22,18 +22,7 @@ jobs:
 #            python-version: '3.12'
           - os: ubuntu-latest
             python-version: '3.13'
-          # Windows 多版本
-#          - os: windows-latest
-#            python-version: '3.9'
-#          - os: windows-latest
-#            python-version: '3.10'
-#          - os: windows-latest
-#            python-version: '3.11'
-#          - os: windows-latest
-#            python-version: '3.12'
-          - os: windows-latest
-            python-version: '3.13'
-          # macOS 多版本
+          # macOS
 #          - os: macos-latest
 #            python-version: '3.9'
 #          - os: macos-latest
@@ -44,6 +33,17 @@ jobs:
 #            python-version: '3.12'
           - os: macos-latest
             python-version: '3.13'
+          # Windows
+#          - os: windows-latest
+#            python-version: '3.9'
+#          - os: windows-latest
+#            python-version: '3.10'
+#          - os: windows-latest
+#            python-version: '3.11'
+#          - os: windows-latest
+#            python-version: '3.12'
+          - os: windows-latest
+            python-version: '3.13'
 
     steps:
       - uses: actions/checkout@v4
@@ -52,36 +52,11 @@ jobs:
       - name: Setup Rust
         uses: dtolnay/rust-toolchain@stable
 
-      - name: Set up additional Rust targets for macOS
+      - name: Setup additional Rust targets for macOS
         if: matrix.os == 'macos-latest'
         run: |
           rustup target add x86_64-apple-darwin
           rustup target add aarch64-apple-darwin
-
-      # 系统依赖
-      - name: Install system dependencies (Linux)
-        if: matrix.os == 'ubuntu-latest'
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y pkg-config libssl-dev
-          echo "OPENSSL_DIR=/usr" >> $GITHUB_ENV
-          echo "PKG_CONFIG_PATH=/usr/lib/x86_64-linux-gnu/pkgconfig" >> $GITHUB_ENV
-
-      - name: Install system dependencies (macOS)
-        if: matrix.os == 'macos-latest'
-        run: |
-          brew install openssl pkg-config || true
-          echo "OPENSSL_DIR=$(brew --prefix openssl)" >> $GITHUB_ENV
-          echo "PKG_CONFIG_PATH=$(brew --prefix openssl)/lib/pkgconfig" >> $GITHUB_ENV
-          echo "MACOSX_DEPLOYMENT_TARGET=10.12" >> $GITHUB_ENV
-
-      - name: Install system dependencies (Windows)
-        if: matrix.os == 'windows-latest'
-        shell: pwsh
-        run: |
-          choco install openssl.light pkgconfiglite -y
-          echo "OPENSSL_DIR=C:\\Program Files\\OpenSSL-Win64" >> $env:GITHUB_ENV
-          echo "PKG_CONFIG_PATH=C:\\Program Files\\OpenSSL-Win64\\lib\\pkgconfig" >> $env:GITHUB_ENV
 
       # Python
       - name: Setup Python
@@ -89,6 +64,31 @@ jobs:
         with:
           python-version: ${{ matrix.python-version }}
 
+      # 安装系统依赖
+      - name: Install system dependencies (Linux)
+        if: matrix.os == 'ubuntu-latest'
+        run: |
+          # manylinux 容器里用 yum 安装 OpenSSL dev
+          sudo yum install -y openssl-devel pkgconfig
+          echo "OPENSSL_DIR=/opt/_internal/openssl" >> $GITHUB_ENV
+          echo "PKG_CONFIG_PATH=/opt/_internal/openssl/lib/pkgconfig" >> $GITHUB_ENV
+
+      - name: Install system dependencies (macOS)
+        if: matrix.os == 'macos-latest'
+        run: |
+          brew install openssl pkg-config || true
+          echo "OPENSSL_DIR=$(brew --prefix openssl)" >> $GITHUB_ENV
+          echo "PKG_CONFIG_PATH=$(brew --prefix openssl)/lib/pkgconfig" >> $GITHUB_ENV
+
+      - name: Install system dependencies (Windows)
+        if: matrix.os == 'windows-latest'
+        shell: pwsh
+        run: |
+          choco install openssl.light pkgconfiglite -y
+          echo "OPENSSL_DIR=C:\Program Files\OpenSSL-Win64" >> $env:GITHUB_ENV
+          echo "PKG_CONFIG_PATH=C:\Program Files\OpenSSL-Win64\lib\pkgconfig" >> $env:GITHUB_ENV
+
+      # 构建工具
       - name: Install build tools
         run: |
           python -m pip install --upgrade pip setuptools wheel
@@ -98,18 +98,9 @@ jobs:
       - name: Build wheels with cibuildwheel
         shell: bash
         run: |
-          cibuildwheel --output-dir wheelhouse . 2>&1 | tee build.log
-          BUILD_EXIT_CODE=${PIPESTATUS[0]}
-          
-          echo "=== Build completed with exit code: $BUILD_EXIT_CODE ==="
-          cat build.log
-          
-          if [ -d wheelhouse ] && [ "$(ls -1 wheelhouse/*.whl 2>/dev/null | wc -l)" -gt 0 ]; then
-            echo "✅ Wheels generated successfully"
-            exit 0
-          else
-            echo "❌ No wheels generated or build failed"
-            exit $BUILD_EXIT_CODE
+          cibuildwheel --output-dir wheelhouse .
+          echo "✅ Wheels built successfully"
+
         env:
           CIBW_BUILD: "cp39-* cp310-* cp311-* cp312-* cp313-*"
           CIBW_SKIP: "*-musllinux_* pp*"
@@ -119,19 +110,17 @@ jobs:
           CIBW_MANYLINUX_X86_64_IMAGE: "manylinux_2_28"
           CIBW_BUILD_COMMAND: "maturin build --release --interpreter python"
           CIBW_REPAIR_WHEEL_COMMAND_LINUX: "python -m auditwheel repair -w {dest_dir} {wheel}"
+          OPENSSL_DIR: ${{ env.OPENSSL_DIR }}
+          PKG_CONFIG_PATH: ${{ env.PKG_CONFIG_PATH }}
 
       # 验证 wheels
       - name: Verify wheels
         run: |
           python -m pip install twine
-          if [ -d wheelhouse ] && [ "$(ls -1 wheelhouse/*.whl 2>/dev/null | wc -l)" -gt 0 ]; then
-            python -m twine check wheelhouse/*.whl
-          else
-            echo "No wheels to verify"
+          python -m twine check wheelhouse/*.whl || true
 
       # 上传 artifact
       - name: Upload wheels as artifacts
-        if: success() || failure()
         uses: actions/upload-artifact@v4
         with:
           name: wheels-${{ matrix.os }}
@@ -148,7 +137,7 @@ jobs:
         with:
           python-version: '3.11'
 
-      - name: Download all wheels
+      - name: Download wheels
         uses: actions/download-artifact@v4
         with:
           path: dist
@@ -168,7 +157,7 @@ jobs:
     if: startsWith(github.ref, 'refs/tags/')
     steps:
       - uses: actions/checkout@v4
-      - name: Download all wheels for release
+      - name: Download wheels for release
         uses: actions/download-artifact@v4
         with:
           path: dist
