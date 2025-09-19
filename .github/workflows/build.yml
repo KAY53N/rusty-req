@@ -21,121 +21,43 @@ jobs:
       image: quay.io/pypa/manylinux_2_28_x86_64
     steps:
       - uses: actions/checkout@v4
-  
+
       - name: Install system dependencies
         run: |
           dnf install -y openssl-devel pkgconfig
-  
+
       - name: Install Rust
         uses: dtolnay/rust-toolchain@stable
         with:
           toolchain: stable
       - run: echo "$HOME/.cargo/bin" >> $GITHUB_PATH
-  
+
       - name: Set up Python & Build Wheel
         shell: bash
         run: |
-          set -euxo pipefail  # 严格模式
-  
+          set -euxo pipefail
           PYTHON_VERSION=${{ matrix.python-version }}
-          echo "=== 当前 Python 版本: $PYTHON_VERSION ==="
-  
-          # 拼接 Python tag
           PYTHON_TAG="cp${PYTHON_VERSION//./}-cp${PYTHON_VERSION//./}"
-          echo "拼接的 Python TAG: $PYTHON_TAG"
-  
-          echo "=== /opt/python 下实际存在的目录 ==="
-          ls -1 /opt/python
-  
-          # 遍历 /opt/python 匹配带 t 或普通目录
           PYTHON_DIR=""
           for dir in /opt/python/*; do
               base=$(basename "$dir")
               if [[ "$base" == "${PYTHON_TAG}t" ]]; then
                   PYTHON_DIR="$dir"
-                  echo "✅ 找到带 t 的目录: $PYTHON_DIR"
                   break
               elif [[ "$base" == "$PYTHON_TAG" ]]; then
                   PYTHON_DIR="$dir"
-                  echo "✅ 找到普通目录: $PYTHON_DIR"
-                  # 继续循环优先找 t
-              else
-                  echo "❌ 跳过目录: $dir"
               fi
           done
-  
           if [[ -z "$PYTHON_DIR" ]]; then
-              echo "❌ 没找到解释器目录 (尝试匹配 cpXXX-cpXXX 和 cpXXX-cpXXXt)"
-              echo "=== /opt/python 下实际存在的目录 ==="
-              ls -1 /opt/python
-              echo "=== 拼接的 Python_TAG: $PYTHON_TAG ==="
-              exit 1
+              echo "❌ 没找到解释器目录"; ls -1 /opt/python; exit 1
           fi
-  
           PYTHON_BIN="${PYTHON_DIR}/bin"
-          echo "使用解释器路径: $PYTHON_BIN"
-  
-          echo "=== Python 和 pip 版本 ==="
-          $PYTHON_BIN/python --version
-          $PYTHON_BIN/pip --version
-  
-          echo "升级 pip 并安装依赖..."
-          $PYTHON_BIN/pip install --upgrade pip
-          $PYTHON_BIN/pip install maturin==1.9.2 twine
-  
+          $PYTHON_BIN/pip install --upgrade pip maturin==1.9.2 twine
           OUTPUT_DIR="/tmp/wheels/linux-py${PYTHON_VERSION}"
           mkdir -p "$OUTPUT_DIR"
-          echo "输出目录: $OUTPUT_DIR"
-  
-          echo "清理 Cargo 构建缓存..."
           cargo clean
-  
-          echo "开始构建 wheel..."
-          $PYTHON_BIN/maturin build \
-            --release \
-            --manylinux 2_28 \
-            --interpreter $PYTHON_BIN/python \
-            --out "$OUTPUT_DIR"
-  
-          echo "=== 构建完成，列出输出目录内容 ==="
-          ls -lh "$OUTPUT_DIR"
-  
-      - name: List built wheels
-        shell: bash
-        run: |
-          PYTHON_VERSION=${{ matrix.python-version }}
-          OUTPUT_DIR="/tmp/wheels/linux-py${PYTHON_VERSION}"
-          echo "=== 列出 $OUTPUT_DIR 下的文件 ==="
-          ls -lh "$OUTPUT_DIR"
-  
-      - name: Verify wheel integrity
-        shell: bash
-        run: |
-          PYTHON_VERSION=${{ matrix.python-version }}
-          PYTHON_TAG="cp${PYTHON_VERSION//./}-cp${PYTHON_VERSION//./}"
-  
-          PYTHON_DIR=""
-          for dir in /opt/python/*; do
-              base=$(basename "$dir")
-              if [[ "$base" == "${PYTHON_TAG}t" ]]; then
-                  PYTHON_DIR="$dir"
-                  break
-              elif [[ "$base" == "$PYTHON_TAG" ]]; then
-                  PYTHON_DIR="$dir"
-              fi
-          done
-  
-          if [[ -z "$PYTHON_DIR" ]]; then
-              echo "❌ 没找到解释器目录"
-              ls -1 /opt/python
-              exit 1
-          fi
-  
-          PYTHON_BIN="${PYTHON_DIR}/bin"
-          OUTPUT_DIR="/tmp/wheels/linux-py${PYTHON_VERSION}"
-          echo "=== 使用 ${PYTHON_BIN} 验证 wheel ==="
-          ${PYTHON_BIN}/python -m twine check "$OUTPUT_DIR"/*.whl
-  
+          $PYTHON_BIN/maturin build --release --manylinux 2_28 --interpreter $PYTHON_BIN/python --out "$OUTPUT_DIR"
+
       - name: Upload Linux wheels
         uses: actions/upload-artifact@v4
         with:
@@ -152,40 +74,28 @@ jobs:
       max-parallel: 3
     steps:
       - uses: actions/checkout@v4
-
       - name: Setup Rust
         uses: dtolnay/rust-toolchain@stable
         with:
           targets: ${{ matrix.target }}
-
       - name: Setup Python
         uses: actions/setup-python@v4
         with:
           python-version: ${{ matrix.python-version }}
-
       - name: Install maturin and twine
         run: pip install maturin twine
-
       - name: Build wheel
         run: |
-          # 为每个配置创建独立输出目录
           OUTPUT_DIR="dist/macos-${{ matrix.target }}-py${{ matrix.python-version }}"
           mkdir -p $OUTPUT_DIR
-          
-          # 清理并构建
           cargo clean
           maturin build --release --target ${{ matrix.target }} --interpreter python --out $OUTPUT_DIR
-
-      - name: Verify wheel integrity
-        run: |
-          OUTPUT_DIR="dist/macos-${{ matrix.target }}-py${{ matrix.python-version }}"
-          twine check $OUTPUT_DIR/*.whl
-
       - name: Upload macOS wheels
         uses: actions/upload-artifact@v4
         with:
           name: wheels-macos-${{ matrix.target }}-py${{ matrix.python-version }}
           path: dist/macos-${{ matrix.target }}-py${{ matrix.python-version }}/*.whl
+
 
   build-windows:
     runs-on: windows-latest
@@ -194,34 +104,26 @@ jobs:
         python-version: ["3.9", "3.10", "3.11", "3.12"]
     steps:
       - uses: actions/checkout@v4
-
       - name: Setup Rust
         uses: dtolnay/rust-toolchain@stable
-
       - name: Setup Python
         uses: actions/setup-python@v4
         with:
           python-version: ${{ matrix.python-version }}
-
       - name: Install maturin and twine
         run: pip install maturin twine
-
       - name: Build wheel
         run: |
           $OUTPUT_DIR = "dist\windows-py${{ matrix.python-version }}"
           New-Item -ItemType Directory -Path $OUTPUT_DIR -Force
           cargo clean
           maturin build --release --interpreter python --out $OUTPUT_DIR
-
-      - name: Verify wheel integrity
-        run: |
-          twine check dist/windows-py${{ matrix.python-version }}/*.whl
-
       - name: Upload Windows wheels
         uses: actions/upload-artifact@v4
         with:
           name: wheels-windows-py${{ matrix.python-version }}
           path: dist/windows-py${{ matrix.python-version }}/*.whl
+
 
   publish:
     needs: [build-linux, build-macos, build-windows]
@@ -230,7 +132,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      # 下载所有 artifacts
+      # 下载 artifacts
       - name: Download Linux artifacts
         uses: actions/download-artifact@v4
         with:
@@ -252,51 +154,17 @@ jobs:
           pattern: wheels-windows-*
           merge-multiple: true
 
-      - name: Collect all wheels
-        run: |
-          mkdir -p final_dist
-          find artifacts -name "*.whl" -exec cp {} final_dist/ \;
-          echo "=== 最终文件 ==="
-          ls -la final_dist/
-
       - name: Install twine
         run: pip install twine
 
-      - name: Verify wheels with twine
+      - name: Verify and Upload wheels per Python version
         run: |
-          echo "=== 详细检查每个 wheel ==="
-          for whl in final_dist/*.whl; do
-            echo "检查: $whl"
-            if twine check "$whl"; then
-              echo "✅ 通过"
-            else
-              echo "❌ 失败，尝试修复..."
-              # 尝试修复 trailing data
-              temp_dir=$(mktemp -d)
-              if unzip -q "$whl" -d "$temp_dir" 2>/dev/null; then
-                cd "$temp_dir"
-                zip -q -r "../fixed.whl" .
-                cd -
-                mv "$temp_dir/../fixed.whl" "$whl"
-                rm -rf "$temp_dir"
-                echo "✅ 修复完成"
-              else
-                echo "❌ 修复失败"
-              fi
-            fi
-            echo "---"
+          for platform_dir in artifacts/*/*; do
+            echo "处理目录: $platform_dir"
+            for whl in "$platform_dir"/*.whl; do
+              echo "检查 wheel: $whl"
+              twine check "$whl"
+              echo "上传 wheel: $whl"
+              twine upload --skip-existing "$whl"
+            done
           done
-
-      - name: Final verification
-        run: |
-          echo "=== 最终验证 ==="
-          twine check final_dist/*.whl
-          echo "✅ 所有文件验证通过"
-
-      - name: Upload to PyPI using twine
-        env:
-          TWINE_USERNAME: __token__
-          TWINE_PASSWORD: ${{ secrets.PYPI_API_TOKEN }}
-        run: |
-          # 使用 twine 上传，跳过已存在的版本
-          twine upload --skip-existing final_dist/*.whl --verbose
