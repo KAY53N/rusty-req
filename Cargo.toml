@@ -28,4 +28,4 @@ version = "0.11"
 features = [ "json", "brotli", "gzip", "deflate", "stream", "native-tls",]
 
 [package.metadata.maturin]
-supported-python-versions = [ "3.9", "3.10", "3.11", "3.12", "3.13",]
+supported-python-versions = [ "3.9", "3.10", "3.11", "3.12",]

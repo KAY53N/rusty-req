@@ -3,173 +3,209 @@ name: Build and Publish Rust Python Extension
 on:
   push:
     tags:
-      - 'v*'
+      - 'v*'   # 例如 v0.1.0、v1.2.3 等
 
 jobs:
-  build:
-    runs-on: ${{ matrix.os }}
+  build-linux:
+    runs-on: ubuntu-latest
     strategy:
       matrix:
-        include:
-          # Linux
-#          - os: ubuntu-latest
-#            python-version: '3.9'
-#          - os: ubuntu-latest
-#            python-version: '3.10'
-#          - os: ubuntu-latest
-#            python-version: '3.11'
-#          - os: ubuntu-latest
-#            python-version: '3.12'
-          - os: ubuntu-latest
-            python-version: '3.13'
-          # macOS
-#          - os: macos-latest
-#            python-version: '3.9'
-#          - os: macos-latest
-#            python-version: '3.10'
-#          - os: macos-latest
-#            python-version: '3.11'
-#          - os: macos-latest
-#            python-version: '3.12'
-          - os: macos-latest
-            python-version: '3.13'
-          # Windows
-#          - os: windows-latest
-#            python-version: '3.9'
-#          - os: windows-latest
-#            python-version: '3.10'
-#          - os: windows-latest
-#            python-version: '3.11'
-#          - os: windows-latest
-#            python-version: '3.12'
-          - os: windows-latest
-            python-version: '3.13'
-
+        python-version: ["3.9", "3.10", "3.11", "3.12", "3.13"]
+    container:
+      image: quay.io/pypa/manylinux_2_28_x86_64
     steps:
       - uses: actions/checkout@v4
 
-      # Rust
-      - name: Setup Rust
-        uses: dtolnay/rust-toolchain@stable
+      - name: Check package manager
+        run: |
+          if command -v yum; then
+            echo "yum 可用"
+            yum --help
+          elif command -v dnf; then
+            echo "dnf 可用"
+            dnf --help
+          else
+            echo "无 yum 和 dnf"
+            exit 1
+          fi
 
-      - name: Setup additional Rust targets for macOS
-        if: matrix.os == 'macos-latest'
+      - name: Install system dependencies
+        run: |
+          dnf install -y openssl-devel pkgconfig
+
+      - name: Install Rust
+        run: |
+          curl https://sh.rustup.rs -sSf | sh -s -- -y
+          source $HOME/.cargo/env
+          echo 'export PATH=$HOME/.cargo/bin:$PATH' >> ~/.bashrc
+
+      - name: Set up Python & Build Wheel
+        shell: bash
+        run: |
+          source $HOME/.cargo/env
+          
+          PYTHON_VERSION=${{ matrix.python-version }}
+          PYTHON_TAG="cp${PYTHON_VERSION/./}-cp${PYTHON_VERSION/./}"
+          
+          PYTHON_DIR=""
+          for dir in /opt/python/${PYTHON_TAG}*; do
+            if [[ -d "$dir" ]]; then
+              PYTHON_DIR="$dir"
+              break
+            fi
+          done
+          
+          if [[ -z "$PYTHON_DIR" ]]; then
+            echo "❌ 没找到解释器目录 /opt/python/${PYTHON_TAG}*"
+            ls -1 /opt/python
+            exit 1
+          fi
+          
+          PYTHON_BIN="${PYTHON_DIR}/bin"
+          echo "✅ 使用解释器路径: ${PYTHON_BIN}"
+          
+          ${PYTHON_BIN}/pip install --upgrade pip
+          ${PYTHON_BIN}/pip install maturin==1.9.2
+          
+          ${PYTHON_BIN}/maturin build --release --manylinux 2_28 --interpreter ${PYTHON_BIN}/python
+      - name: Upload Linux wheels
+        uses: actions/upload-artifact@v4
+        with:
+          name: wheels-linux-py${{ matrix.python-version }}
+          path: target/wheels/*.whl
+
+  build-macos:
+    runs-on: macos-latest
+    continue-on-error: true
+    strategy:
+      matrix:
+        python-version: ["3.9", "3.10", "3.11", "3.12", "3.13"]
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Rust
+        uses: actions-rs/toolchain@v1
+        with:
+          toolchain: stable
+          override: true
+
+      - name: Add macOS targets
         run: |
           rustup target add x86_64-apple-darwin
           rustup target add aarch64-apple-darwin
 
-      # Python
       - name: Setup Python
         uses: actions/setup-python@v4
         with:
           python-version: ${{ matrix.python-version }}
 
-      # 安装系统依赖
-      - name: Install system dependencies (Linux)
-        if: matrix.os == 'ubuntu-latest'
+      - name: Install maturin and delocate
+        run: pip install maturin delocate
+
+      - name: Build x86_64 wheel
         run: |
-          sudo apt-get update
-          sudo apt-get install -y libssl-dev pkg-config
-          # 设置环境变量给 Rust 编译使用
-          echo "OPENSSL_DIR=/usr" >> $GITHUB_ENV
-          echo "PKG_CONFIG_PATH=/usr/lib/x86_64-linux-gnu/pkgconfig" >> $GITHUB_ENV
+          mkdir -p target/wheels/x86_64
+          maturin build --release --target x86_64-apple-darwin --interpreter python${{ matrix.python-version }}
+          mv target/wheels/*.whl target/wheels/x86_64/
 
-      - name: Install system dependencies (macOS)
-        if: matrix.os == 'macos-latest'
+      - name: Build aarch64 wheel
         run: |
-          brew install openssl pkg-config || true
-          echo "OPENSSL_DIR=$(brew --prefix openssl)" >> $GITHUB_ENV
-          echo "PKG_CONFIG_PATH=$(brew --prefix openssl)/lib/pkgconfig" >> $GITHUB_ENV
+          mkdir -p target/wheels/aarch64
+          maturin build --release --target aarch64-apple-darwin --interpreter python${{ matrix.python-version }}
+          mv target/wheels/*.whl target/wheels/aarch64/
 
-      - name: Install system dependencies (Windows)
-        if: matrix.os == 'windows-latest'
-        shell: pwsh
+      - name: Create universal2 wheel
         run: |
-          choco install openssl.light pkgconfiglite -y
-          echo "OPENSSL_DIR=C:\Program Files\OpenSSL-Win64" >> $env:GITHUB_ENV
-          echo "PKG_CONFIG_PATH=C:\Program Files\OpenSSL-Win64\lib\pkgconfig" >> $env:GITHUB_ENV
+          pip install delocate
+          mkdir -p target/wheels/universal
+          delocate-merge \
+            -w target/wheels/universal \
+            target/wheels/x86_64/*.whl \
+            target/wheels/aarch64/*.whl
+          mv target/wheels/universal/*.whl target/wheels/
 
-      # 构建工具
-      - name: Install build tools
-        run: |
-          python -m pip install --upgrade pip setuptools wheel
-          pip install cibuildwheel==2.16.2 maturin==1.9.2
-
-      # 编译 wheel
-      - name: Build wheels with cibuildwheel
-        shell: bash
-        run: |
-          cibuildwheel --output-dir wheelhouse .
-          echo "✅ Wheels built successfully"
-
-        env:
-          CIBW_BUILD: "cp39-* cp310-* cp311-* cp312-* cp313-*"
-          CIBW_SKIP: "*-musllinux_* pp*"
-          CIBW_ARCHS_MACOS: "x86_64 arm64"
-          CIBW_ARCHS_LINUX: "x86_64"
-          CIBW_ARCHS_WINDOWS: "AMD64"
-          CIBW_MANYLINUX_X86_64_IMAGE: "manylinux_2_28"
-          CIBW_BUILD_COMMAND: "maturin build --release --interpreter python"
-          CIBW_REPAIR_WHEEL_COMMAND_LINUX: "python -m auditwheel repair -w {dest_dir} {wheel}"
-          OPENSSL_DIR: ${{ env.OPENSSL_DIR }}
-          PKG_CONFIG_PATH: ${{ env.PKG_CONFIG_PATH }}
-
-      # 验证 wheels
-      - name: Verify wheels
-        run: |
-          python -m pip install twine
-          python -m twine check wheelhouse/*.whl || true
-
-      # 上传 artifact
-      - name: Upload wheels as artifacts
-        uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v4
         with:
-          name: wheels-${{ matrix.os }}
-          path: ./wheelhouse/*.whl
+          name: wheels-macos-py${{ matrix.python-version }}
+          path: target/wheels/*.whl
 
-  # 发布到 PyPI
-  publish:
-    needs: build
-    runs-on: ubuntu-latest
-    if: startsWith(github.ref, 'refs/tags/')
+  build-windows:
+    runs-on: windows-latest
+    strategy:
+      matrix:
+        python-version: ["3.9", "3.10", "3.11", "3.12", "3.13"]
     steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Rust
+        uses: actions-rs/toolchain@v1
+        with:
+          toolchain: stable
+          override: true
+
       - name: Setup Python
         uses: actions/setup-python@v4
         with:
-          python-version: '3.11'
+          python-version: ${{ matrix.python-version }}
 
-      - name: Download wheels
-        uses: actions/download-artifact@v4
+      - name: Clean build dirs
+        shell: pwsh
+        run: |
+          Remove-Item -Recurse -Force target, dist, final_dist -ErrorAction Ignore
+
+      - name: Install maturin
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install maturin==1.9.2
+
+      - name: Build wheel
+        run: |
+          python -m maturin build --release --interpreter python${{ matrix.python-version }}
+
+      - name: Upload Windows wheels
+        uses: actions/upload-artifact@v4
         with:
-          path: dist
-          pattern: wheels-*
-          merge-multiple: true
+          name: wheels-windows-py${{ matrix.python-version }}
+          path: target/wheels/*.whl
 
-      - name: Upload to PyPI
-        env:
-          TWINE_USERNAME: __token__
-          TWINE_PASSWORD: ${{ secrets.PYPI_API_TOKEN }}
-        run: python -m twine upload --skip-existing dist/*.whl --verbose
-
-  # 创建 GitHub Release
-  release:
-    needs: publish
+  publish:
+    needs: [build-linux, build-macos, build-windows]
     runs-on: ubuntu-latest
     if: startsWith(github.ref, 'refs/tags/')
     steps:
       - uses: actions/checkout@v4
-      - name: Download wheels for release
-        uses: actions/download-artifact@v4
+
+      - uses: actions/download-artifact@v4
         with:
           path: dist
           pattern: wheels-*
           merge-multiple: true
-      - name: Create GitHub Release
-        uses: softprops/action-gh-release@v1
+
+      - name: Show downloaded artifacts
+        run: |
+          echo "=== dist 目录结构 ==="
+          ls -R dist || true
+
+      - name: Collect all wheels into final_dist
+        shell: bash
+        run: |
+          mkdir -p final_dist
+          # 用 find 避免 ** 不展开问题
+          find dist -type f -name "*.whl" -exec cp {} final_dist/ \;
+          echo "=== final_dist 内容 ==="
+          ls -lh final_dist
+
+      - name: Check wheels with twine
+        shell: bash
+        run: |
+          pip install --upgrade pip twine
+          twine check final_dist/*.whl
+
+      - name: Publish to PyPI
+        uses: pypa/gh-action-pypi-publish@release/v1
         with:
-          files: dist/*.whl
-          draft: false
-          prerelease: false
-          generate_release_notes: true
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          user: __token__
+          password: ${{ secrets.PYPI_API_TOKEN }}
+          skip_existing: true
+          verbose: true
+          packages_dir: final_dist
