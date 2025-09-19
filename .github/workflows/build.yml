@@ -145,20 +145,17 @@ jobs:
       - name: Download all artifacts
         uses: actions/download-artifact@v4
         with:
-          path: dist
+          path: final_dist
           pattern: wheels-*
           merge-multiple: true
-  
-      - name: List downloaded wheels
-        run: find dist -name "*.whl" | xargs ls -la
   
       - name: Install twine
         run: pip install twine
   
-      - name: Publish to PyPI
-        run: |
-          echo "上传所有 wheel 文件到 PyPI..."
-          find dist -name "*.whl" -exec twine upload --skip-existing {} \;
+      - name: Upload to PyPI using twine
         env:
           TWINE_USERNAME: __token__
-          TWINE_PASSWORD: ${{ secrets.PYPI_TOKEN }}
+          TWINE_PASSWORD: ${{ secrets.PYPI_API_TOKEN }}
+        run: |
+          # 使用 twine 上传，跳过已存在的版本
+          twine upload --skip-existing final_dist/*.whl --verbose
