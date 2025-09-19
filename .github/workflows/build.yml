@@ -3,7 +3,13 @@ name: Build and Publish Rust Python Extension
 on:
   push:
     tags:
-      - 'v*'   # 例如 v0.1.0、v1.2.3 等
+      - 'v*'
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "要发布的版本号 (例如 v0.1.0)"
+        required: false
+        default: ""
 
 jobs:
   build-linux:
