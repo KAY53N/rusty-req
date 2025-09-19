@@ -35,45 +35,60 @@ jobs:
       - name: Set up Python & Build Wheel
         shell: bash
         run: |
+          set -euxo pipefail  # 开启严格模式，遇到错误立即退出，并显示每条命令
+      
           PYTHON_VERSION=${{ matrix.python-version }}
-          PYTHON_TAG="cp${PYTHON_VERSION/./}-cp${PYTHON_VERSION/./}"
+          echo "=== 当前 Python 版本: $PYTHON_VERSION ==="
       
-          # 封装查找函数
-          find_python_dir() {
-            local tag=$1
-            # 优先匹配 cpXXX-cpXXXt，如果找不到再匹配 cpXXX-cpXXX
-            PY_DIR=$(find /opt/python -maxdepth 1 -type d -name "${tag}t" | head -1)
-            if [[ -z "$PY_DIR" ]]; then
-              PY_DIR=$(find /opt/python -maxdepth 1 -type d -name "${tag}" | head -1)
+          # 拼接 Python tag，替换所有点号
+          PYTHON_TAG="cp${PYTHON_VERSION//./}-cp${PYTHON_VERSION//./}"
+          echo "拼接的 Python TAG: $PYTHON_TAG"
+      
+          # 尝试先找带 t 的目录，再找普通目录
+          PYTHON_DIR=$(find /opt/python -maxdepth 1 -type d -name "${PYTHON_TAG}t" | head -1)
+          if [[ -n "$PYTHON_DIR" ]]; then
+            echo "✅ 找到解释器目录 (带 t 后缀): $PYTHON_DIR"
+          else
+            echo "⚠️ 没找到带 t 后缀的目录，尝试普通目录..."
+            PYTHON_DIR=$(find /opt/python -maxdepth 1 -type d -name "${PYTHON_TAG}" | head -1)
+            if [[ -n "$PYTHON_DIR" ]]; then
+              echo "✅ 找到解释器目录: $PYTHON_DIR"
+            else
+              echo "❌ 没找到解释器目录"
+              echo "=== /opt/python 下实际存在的目录 ==="
+              ls -1 /opt/python
+              exit 1
             fi
-            echo "$PY_DIR"
-          }
-      
-          PYTHON_DIR=$(find_python_dir "$PYTHON_TAG")
-      
-          if [[ -z "$PYTHON_DIR" ]]; then
-            echo "❌ 没找到解释器目录"
-            echo "=== /opt/python 下实际存在的目录 ==="
-            ls -1 /opt/python
-            exit 1
           fi
       
           PYTHON_BIN="${PYTHON_DIR}/bin"
-          echo "✅ 使用解释器路径: ${PYTHON_BIN}"
+          echo "使用解释器路径: $PYTHON_BIN"
       
-          # 升级 pip 并安装 maturin
-          ${PYTHON_BIN}/pip install --upgrade pip
-          ${PYTHON_BIN}/pip install maturin==1.9.2 twine
+          # 显示 python 和 pip 版本
+          $PYTHON_BIN/python --version
+          $PYTHON_BIN/pip --version
+      
+          echo "升级 pip 并安装依赖..."
+          $PYTHON_BIN/pip install --upgrade pip
+          $PYTHON_BIN/pip install maturin==1.9.2 twine
       
           OUTPUT_DIR="/tmp/wheels/linux-py${PYTHON_VERSION}"
           mkdir -p $OUTPUT_DIR
+          echo "输出目录: $OUTPUT_DIR"
       
+          echo "清理 Cargo 构建缓存..."
           cargo clean
-          ${PYTHON_BIN}/maturin build \
+      
+          echo "开始构建 wheel..."
+          $PYTHON_BIN/maturin build \
             --release \
             --manylinux 2_28 \
-            --interpreter ${PYTHON_BIN}/python \
+            --interpreter $PYTHON_BIN/python \
             --out $OUTPUT_DIR
+      
+          echo "=== 构建完成，列出输出目录内容 ==="
+          ls -lh $OUTPUT_DIR
+
   
       - name: List built wheels
         shell: bash
