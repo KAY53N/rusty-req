@@ -12,36 +12,36 @@ jobs:
       matrix:
         include:
           # Ubuntu 多版本
-          - os: ubuntu-latest
-            python-version: '3.9'
-          - os: ubuntu-latest
-            python-version: '3.10'
-          - os: ubuntu-latest
-            python-version: '3.11'
-          - os: ubuntu-latest
-            python-version: '3.12'
+#          - os: ubuntu-latest
+#            python-version: '3.9'
+#          - os: ubuntu-latest
+#            python-version: '3.10'
+#          - os: ubuntu-latest
+#            python-version: '3.11'
+#          - os: ubuntu-latest
+#            python-version: '3.12'
           - os: ubuntu-latest
             python-version: '3.13'
           # Windows 多版本
-          - os: windows-latest
-            python-version: '3.9'
-          - os: windows-latest
-            python-version: '3.10'
-          - os: windows-latest
-            python-version: '3.11'
-          - os: windows-latest
-            python-version: '3.12'
+#          - os: windows-latest
+#            python-version: '3.9'
+#          - os: windows-latest
+#            python-version: '3.10'
+#          - os: windows-latest
+#            python-version: '3.11'
+#          - os: windows-latest
+#            python-version: '3.12'
           - os: windows-latest
             python-version: '3.13'
           # macOS 多版本
-          - os: macos-latest
-            python-version: '3.9'
-          - os: macos-latest
-            python-version: '3.10'
-          - os: macos-latest
-            python-version: '3.11'
-          - os: macos-latest
-            python-version: '3.12'
+#          - os: macos-latest
+#            python-version: '3.9'
+#          - os: macos-latest
+#            python-version: '3.10'
+#          - os: macos-latest
+#            python-version: '3.11'
+#          - os: macos-latest
+#            python-version: '3.12'
           - os: macos-latest
             python-version: '3.13'
 
@@ -73,14 +73,15 @@ jobs:
           brew install openssl pkg-config || true
           echo "OPENSSL_DIR=$(brew --prefix openssl)" >> $GITHUB_ENV
           echo "PKG_CONFIG_PATH=$(brew --prefix openssl)/lib/pkgconfig" >> $GITHUB_ENV
+          echo "MACOSX_DEPLOYMENT_TARGET=10.12" >> $GITHUB_ENV
 
       - name: Install system dependencies (Windows)
         if: matrix.os == 'windows-latest'
         shell: pwsh
         run: |
           choco install openssl.light pkgconfiglite -y
-          echo "OPENSSL_DIR=C:\Program Files\OpenSSL-Win64" >> $env:GITHUB_ENV
-          echo "PKG_CONFIG_PATH=C:\Program Files\OpenSSL-Win64\lib\pkgconfig" >> $env:GITHUB_ENV
+          echo "OPENSSL_DIR=C:\\Program Files\\OpenSSL-Win64" >> $env:GITHUB_ENV
+          echo "PKG_CONFIG_PATH=C:\\Program Files\\OpenSSL-Win64\\lib\\pkgconfig" >> $env:GITHUB_ENV
 
       # Python
       - name: Setup Python
@@ -97,13 +98,6 @@ jobs:
       - name: Build wheels with cibuildwheel
         shell: bash
         run: |
-          # 对 Linux 主机（manylinux 容器）安装必要依赖
-          if [[ "$RUNNER_OS" == "Linux" ]]; then
-            sudo apt-get update
-            sudo apt-get install -y pkg-config libssl-dev
-          fi
-          
-          # 执行 cibuildwheel
           cibuildwheel --output-dir wheelhouse . 2>&1 | tee build.log
           BUILD_EXIT_CODE=${PIPESTATUS[0]}
           
@@ -123,19 +117,6 @@ jobs:
           CIBW_ARCHS_LINUX: "x86_64"
           CIBW_ARCHS_WINDOWS: "AMD64"
           CIBW_MANYLINUX_X86_64_IMAGE: "manylinux_2_28"
-          CIBW_ENVIRONMENT: |
-            # Linux (manylinux 容器)
-            OPENSSL_DIR=/usr
-            PKG_CONFIG_PATH=/usr/lib/x86_64-linux-gnu/pkgconfig
-        
-            # macOS
-            MACOSX_DEPLOYMENT_TARGET=10.12
-            OPENSSL_DIR=$(brew --prefix openssl)
-            PKG_CONFIG_PATH=$(brew --prefix openssl)/lib/pkgconfig
-        
-            # Windows
-            OPENSSL_DIR="C:\Program Files\OpenSSL-Win64"
-            PKG_CONFIG_PATH="C:\Program Files\OpenSSL-Win64\lib\pkgconfig"
           CIBW_BUILD_COMMAND: "maturin build --release --interpreter python"
           CIBW_REPAIR_WHEEL_COMMAND_LINUX: "python -m auditwheel repair -w {dest_dir} {wheel}"
 
