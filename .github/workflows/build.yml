@@ -11,7 +11,6 @@ jobs:
     strategy:
       matrix:
         python-version: ["3.9", "3.10", "3.11", "3.12", "3.13"]
-    #      max-parallel: 5
     container:
       image: quay.io/pypa/manylinux_2_28_x86_64
     steps:
@@ -53,22 +52,40 @@ jobs:
           echo "✅ 使用解释器路径: ${PYTHON_BIN}"
           
           ${PYTHON_BIN}/pip install --upgrade pip
-          ${PYTHON_BIN}/pip install maturin==1.9.2
+          ${PYTHON_BIN}/pip install maturin==1.9.2 twine
           
-          ${PYTHON_BIN}/maturin build --release --manylinux 2_28 --interpreter ${PYTHON_BIN}/python
+          # 为每个Python版本创建独立输出目录
+          OUTPUT_DIR="/tmp/wheels/linux-py${{ matrix.python-version }}"
+          mkdir -p $OUTPUT_DIR
+          
+          # 清理并构建
+          cargo clean
+          ${PYTHON_BIN}/maturin build --release --manylinux 2_28 --interpreter ${PYTHON_BIN}/python --out $OUTPUT_DIR
+
+      - name: Verify wheel integrity
+        shell: bash
+        run: |
+          source ~/.bashrc
+          PYTHON_VERSION=${{ matrix.python-version }}
+          PYTHON_TAG="cp${PYTHON_VERSION/./}-cp${PYTHON_VERSION/./}"
+          PYTHON_DIR=$(find /opt/python -name "${PYTHON_TAG}*" -type d | head -1)
+          PYTHON_BIN="${PYTHON_DIR}/bin"
+          
+          OUTPUT_DIR="/tmp/wheels/linux-py${{ matrix.python-version }}"
+          ${PYTHON_BIN}/twine check $OUTPUT_DIR/*.whl
 
       - name: Upload Linux wheels
         uses: actions/upload-artifact@v4
         with:
           name: wheels-linux-py${{ matrix.python-version }}
-          path: target/wheels/*.whl
+          path: /tmp/wheels/linux-py${{ matrix.python-version }}/*.whl
 
   build-macos:
     runs-on: macos-latest
     strategy:
       matrix:
         python-version: ["3.9", "3.10", "3.11", "3.12", "3.13"]
-        target: ["x86_64-apple-darwin", "aarch64-apple-darwin"]  # 分别构建
+        target: ["x86_64-apple-darwin", "aarch64-apple-darwin"]
       max-parallel: 3
     steps:
       - uses: actions/checkout@v4
@@ -83,25 +100,35 @@ jobs:
         with:
           python-version: ${{ matrix.python-version }}
 
-      - name: Install maturin
-        run: pip install maturin
+      - name: Install maturin and twine
+        run: pip install maturin twine
 
       - name: Build wheel
         run: |
-          maturin build --release --target ${{ matrix.target }} --interpreter python
+          # 为每个配置创建独立输出目录
+          OUTPUT_DIR="dist/macos-${{ matrix.target }}-py${{ matrix.python-version }}"
+          mkdir -p $OUTPUT_DIR
+          
+          # 清理并构建
+          cargo clean
+          maturin build --release --target ${{ matrix.target }} --interpreter python --out $OUTPUT_DIR
+
+      - name: Verify wheel integrity
+        run: |
+          OUTPUT_DIR="dist/macos-${{ matrix.target }}-py${{ matrix.python-version }}"
+          twine check $OUTPUT_DIR/*.whl
 
       - name: Upload macOS wheels
         uses: actions/upload-artifact@v4
         with:
           name: wheels-macos-${{ matrix.target }}-py${{ matrix.python-version }}
-          path: target/wheels/*.whl
+          path: dist/macos-${{ matrix.target }}-py${{ matrix.python-version }}/*.whl
 
   build-windows:
     runs-on: windows-latest
     strategy:
       matrix:
         python-version: ["3.9", "3.10", "3.11", "3.12", "3.13"]
-    #      max-parallel: 5
     steps:
       - uses: actions/checkout@v4
 
@@ -113,17 +140,25 @@ jobs:
         with:
           python-version: ${{ matrix.python-version }}
 
-      - name: Install maturin
-        run: pip install maturin
+      - name: Install maturin and twine
+        run: pip install maturin twine
 
       - name: Build wheel
-        run: maturin build --release --interpreter python
+        run: |
+          $OUTPUT_DIR = "dist\windows-py${{ matrix.python-version }}"
+          New-Item -ItemType Directory -Path $OUTPUT_DIR -Force
+          cargo clean
+          maturin build --release --interpreter python --out $OUTPUT_DIR
+
+      - name: Verify wheel integrity
+        run: |
+          twine check dist/windows-py${{ matrix.python-version }}/*.whl
 
       - name: Upload Windows wheels
         uses: actions/upload-artifact@v4
         with:
           name: wheels-windows-py${{ matrix.python-version }}
-          path: target/wheels/*.whl
+          path: dist/windows-py${{ matrix.python-version }}/*.whl
 
   publish:
     needs: [build-linux, build-macos, build-windows]
@@ -136,28 +171,28 @@ jobs:
       - name: Download Linux artifacts
         uses: actions/download-artifact@v4
         with:
-          path: dist/linux
+          path: artifacts/linux
           pattern: wheels-linux-*
           merge-multiple: true
 
       - name: Download macOS artifacts
         uses: actions/download-artifact@v4
         with:
-          path: dist/macos
+          path: artifacts/macos
           pattern: wheels-macos-*
           merge-multiple: true
 
       - name: Download Windows artifacts
         uses: actions/download-artifact@v4
         with:
-          path: dist/windows
+          path: artifacts/windows
           pattern: wheels-windows-*
           merge-multiple: true
 
       - name: Collect all wheels
         run: |
           mkdir -p final_dist
-          find dist -name "*.whl" -exec cp {} final_dist/ \;
+          find artifacts -name "*.whl" -exec cp {} final_dist/ \;
           echo "=== 最终文件 ==="
           ls -la final_dist/
 
@@ -169,30 +204,31 @@ jobs:
           echo "=== 详细检查每个 wheel ==="
           for whl in final_dist/*.whl; do
             echo "检查: $whl"
-            twine check "$whl" && echo "✅ 通过" || echo "❌ 失败"
+            if twine check "$whl"; then
+              echo "✅ 通过"
+            else
+              echo "❌ 失败，尝试修复..."
+              # 尝试修复 trailing data
+              temp_dir=$(mktemp -d)
+              if unzip -q "$whl" -d "$temp_dir" 2>/dev/null; then
+                cd "$temp_dir"
+                zip -q -r "../fixed.whl" .
+                cd -
+                mv "$temp_dir/../fixed.whl" "$whl"
+                rm -rf "$temp_dir"
+                echo "✅ 修复完成"
+              else
+                echo "❌ 修复失败"
+              fi
+            fi
             echo "---"
           done
 
-      - name: Debug - Inspect metadata in detail
+      - name: Final verification
         run: |
-          echo "=== 详细检查元数据 ==="
-          for whl in final_dist/*.whl; do
-            echo "🔍 检查: $(basename $whl)"
-          
-            # 检查 METADATA 文件是否存在
-            if unzip -l "$whl" | grep -q "METADATA"; then
-              echo "✅ METADATA 文件存在"
-              # 提取并显示 METADATA 内容
-              unzip -p "$whl" "*.dist-info/METADATA" | head -20
-            else
-              echo "❌ METADATA 文件缺失"
-              unzip -l "$whl" | grep "dist-info"
-            fi
-          
-            # 检查文件名格式
-            echo "文件名: $(basename $whl)"
-            echo "---"
-          done
+          echo "=== 最终验证 ==="
+          twine check final_dist/*.whl
+          echo "✅ 所有文件验证通过"
 
       - name: Upload to PyPI using twine
         env:
