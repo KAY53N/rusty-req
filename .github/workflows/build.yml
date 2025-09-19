@@ -32,6 +32,9 @@ jobs:
 
       - name: Build wheels using cibuildwheel
         uses: pypa/cibuildwheel@v2.16.2
+        with:
+          output-dir: wheelhouse
+          config-file: ""
         env:
           CIBW_BUILD: "cp39-* cp310-* cp311-* cp312-* cp313-*"
           CIBW_SKIP: "*-musllinux_* pp*"
@@ -80,12 +83,16 @@ jobs:
       - name: Collect and validate wheels
         run: |
           echo "=== 收集的 wheel 文件 ==="
-          ls -la dist/
+          find dist -name "*.whl" -exec ls -la {} \;
           
           echo "=== 验证所有 wheel 文件 ==="
           python -m pip install twine
           
-          for whl in dist/*.whl; do
+          # 创建统一的目录存放所有 wheel 文件
+          mkdir -p dist_final
+          find dist -name "*.whl" -exec cp {} dist_final/ \;
+          
+          for whl in dist_final/*.whl; do
             echo "🔍 验证: $(basename $whl)"
           
             size=$(stat -c%s "$whl" 2>/dev/null || stat -f%z "$whl" 2>/dev/null)
@@ -134,21 +141,21 @@ jobs:
             echo "---"
           done
           
-          remaining_files=$(ls dist/*.whl 2>/dev/null | wc -l)
+          remaining_files=$(ls dist_final/*.whl 2>/dev/null | wc -l)
           if [ "$remaining_files" -eq 0 ]; then
             echo "❌ 没有有效的 wheel 文件"
             exit 1
           fi
           
           echo "=== 准备上传的文件 ==="
-          ls -la dist/
+          ls -la dist_final/
 
       - name: Upload to PyPI
         env:
           TWINE_USERNAME: __token__
           TWINE_PASSWORD: ${{ secrets.PYPI_API_TOKEN }}
         run: |
-          python -m twine upload --skip-existing dist/*.whl --verbose
+          python -m twine upload --skip-existing dist_final/*.whl --verbose
 
   release:
     needs: [publish]
@@ -165,10 +172,17 @@ jobs:
           pattern: wheels-*
           merge-multiple: true
 
+      - name: Prepare release assets
+        run: |
+          mkdir -p release_assets
+          find release_dist -name "*.whl" -exec cp {} release_assets/ \;
+          echo "=== 发布文件 ==="
+          ls -la release_assets/
+
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v1
         with:
-          files: release_dist/*.whl
+          files: release_assets/*.whl
           draft: false
           prerelease: false
           generate_release_notes: true
