@@ -27,62 +27,50 @@ jobs:
           dnf install -y openssl-devel pkgconfig
 
       - name: Install Rust
-        run: |
-          curl https://sh.rustup.rs -sSf | sh -s -- -y
-          echo 'export PATH=$HOME/.cargo/bin:$PATH' >> ~/.bashrc
-          source ~/.bashrc
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: stable
+      - run: echo "$HOME/.cargo/bin" >> $GITHUB_PATH
 
       - name: Set up Python & Build Wheel
         shell: bash
         run: |
-          source ~/.bashrc
-          
           PYTHON_VERSION=${{ matrix.python-version }}
           PYTHON_TAG="cp${PYTHON_VERSION/./}-cp${PYTHON_VERSION/./}"
-          
-          PYTHON_DIR=""
-          for dir in /opt/python/${PYTHON_TAG}*; do
-            if [[ -d "$dir" ]]; then
-              PYTHON_DIR="$dir"
-              break
-            fi
-          done
-          
+
+          PYTHON_DIR=$(find /opt/python -maxdepth 1 -type d -name "${PYTHON_TAG}*")
           if [[ -z "$PYTHON_DIR" ]]; then
             echo "❌ 没找到解释器目录 /opt/python/${PYTHON_TAG}*"
             ls -1 /opt/python
             exit 1
           fi
-          
           PYTHON_BIN="${PYTHON_DIR}/bin"
           echo "✅ 使用解释器路径: ${PYTHON_BIN}"
-          
+
           ${PYTHON_BIN}/pip install --upgrade pip
           ${PYTHON_BIN}/pip install maturin==1.9.2 twine
-          
-          # 为每个Python版本创建独立输出目录
-          OUTPUT_DIR="/tmp/wheels/linux-py${{ matrix.python-version }}"
+
+          OUTPUT_DIR="/tmp/wheels/linux-py${PYTHON_VERSION}"
           mkdir -p $OUTPUT_DIR
-          
-          # 清理并构建
+
           cargo clean
-          ${PYTHON_BIN}/maturin build --release --manylinux 2_28 --interpreter ${PYTHON_BIN}/python --out $OUTPUT_DIR
+          ${PYTHON_BIN}/maturin build \
+            --release \
+            --manylinux 2_28 \
+            --interpreter ${PYTHON_BIN}/python \
+            --out $OUTPUT_DIR
 
       - name: Verify wheel integrity
         shell: bash
         run: |
-          source ~/.bashrc
-          
           PYTHON_VERSION=${{ matrix.python-version }}
           PYTHON_TAG="cp${PYTHON_VERSION/./}-cp${PYTHON_VERSION/./}"
-          
-          # 找到对应的 Python 解释器
+
           PYTHON_DIR=$(find /opt/python -name "${PYTHON_TAG}*" -type d | head -1)
           PYTHON_BIN="${PYTHON_DIR}/bin"
-          
-          OUTPUT_DIR="/tmp/wheels/linux-py${{ matrix.python-version }}"
-          
-          # 使用 Python 模块方式运行 twine（更可靠）
+
+          OUTPUT_DIR="/tmp/wheels/linux-py${PYTHON_VERSION}"
+
           ${PYTHON_BIN}/python -m twine check $OUTPUT_DIR/*.whl
 
       - name: Upload Linux wheels
