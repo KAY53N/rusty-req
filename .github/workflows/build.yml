@@ -3,7 +3,7 @@ name: Build and Publish Rust Python Extension
 on:
   push:
     tags:
-      - 'v*'   # 例如 v0.1.0、v1.2.3 等
+      - 'v*'
 
 jobs:
   build:
@@ -33,67 +33,31 @@ jobs:
       - name: Build wheels using cibuildwheel
         uses: pypa/cibuildwheel@v2.16.2
         env:
-          # 构建 Python 3.9 到 3.13 的 wheel
           CIBW_BUILD: "cp39-* cp310-* cp311-* cp312-* cp313-*"
-
-          # 跳过一些不需要的构建
-          CIBW_SKIP: "*-musllinux_* pp*"  # 跳过 musl 和 PyPy
-
-          # macOS: 构建多个架构
+          CIBW_SKIP: "*-musllinux_* pp*"
           CIBW_ARCHS_MACOS: "x86_64 arm64"
-
-          # Linux: 使用 manylinux_2_28
           CIBW_ARCHS_LINUX: "x86_64"
           CIBW_MANYLINUX_X86_64_IMAGE: "manylinux_2_28"
-
-          # Windows: 64位
           CIBW_ARCHS_WINDOWS: "AMD64"
-
-          # 安装构建依赖
           CIBW_BEFORE_BUILD: |
             pip install --upgrade pip setuptools wheel
             pip install maturin==1.9.2
-
-          # Linux 特殊设置：安装系统依赖
           CIBW_BEFORE_BUILD_LINUX: |
             dnf install -y openssl-devel pkgconfig || yum install -y openssl-devel pkgconfig || apt-get update && apt-get install -y pkg-config libssl-dev
             pip install --upgrade pip setuptools wheel
             pip install maturin==1.9.2
-
-          # Windows 特殊设置
           CIBW_BEFORE_BUILD_WINDOWS: |
             pip install --upgrade pip setuptools wheel
             pip install maturin==1.9.2
-
-          # macOS 环境变量设置
           CIBW_ENVIRONMENT_MACOS: "MACOSX_DEPLOYMENT_TARGET=10.12"
-
-          # 通用构建命令
           CIBW_BUILD_COMMAND: "maturin build --release --interpreter python"
-
-          # macOS 特殊构建命令：为每个架构指定目标
           CIBW_BUILD_COMMAND_MACOS: |
             if [[ "$(uname -m)" == "arm64" ]]; then
               maturin build --release --target aarch64-apple-darwin --interpreter python
             else
               maturin build --release --target x86_64-apple-darwin --interpreter python
             fi
-
-          # 修复 Linux wheel 的依赖
           CIBW_REPAIR_WHEEL_COMMAND_LINUX: "auditwheel repair -w {dest_dir} {wheel}"
-
-          # 可选：测试构建的 wheel（如果需要可以取消注释）
-          # CIBW_TEST_COMMAND: |
-          #   python -c "
-          #   import sys
-          #   print(f'Python version: {sys.version}')
-          #   try:
-          #       import rusty_req  # 替换为你的实际模块名
-          #       print('✅ 模块导入成功')
-          #   except ImportError as e:
-          #       print(f'❌ 模块导入失败: {e}')
-          #       sys.exit(1)
-          #   "
 
       - name: Verify wheels
         run: |
@@ -130,7 +94,6 @@ jobs:
           for whl in dist/*.whl; do
             echo "🔍 验证: $(basename $whl)"
           
-            # 检查文件大小
             size=$(stat -c%s "$whl" 2>/dev/null || stat -f%z "$whl" 2>/dev/null)
             echo "文件大小: $size bytes"
           
@@ -140,93 +103,80 @@ jobs:
               continue
             fi
           
-            # 使用 Python 验证 ZIP 完整性
             python3 -c "
-  import zipfile
-  import sys
-try:
-  with zipfile.ZipFile('$whl', 'r') as zf:
-    bad_files = zf.testzip()
-    if bad_files:
-      print('❌ ZIP 损坏:', bad_files)
-      sys.exit(1)
+          import zipfile
+          import sys
+          try:
+              with zipfile.ZipFile('$whl', 'r') as zf:
+                  bad_files = zf.testzip()
+                  if bad_files:
+                      print('❌ ZIP 损坏:', bad_files)
+                      sys.exit(1)
+          
+                  files = zf.namelist()
+                  has_metadata = any('METADATA' in f for f in files)
+                  has_wheel = any('WHEEL' in f for f in files)
+          
+                  if not (has_metadata and has_wheel):
+                      print('❌ 缺少必要的元数据文件')
+                      sys.exit(1)
+          
+                  print('✅ ZIP 结构正常')
+          
+          except zipfile.BadZipFile as e:
+              print('❌ ZIP 文件损坏:', e)
+              sys.exit(1)
+          except Exception as e:
+              print('❌ 验证失败:', e)
+              sys.exit(1)
+          " || { echo "❌ $(basename $whl) ZIP 验证失败，删除"; rm "$whl"; continue; }
+          
+            if python -m twine check "$whl"; then
+              echo "✅ $(basename $whl) 验证通过"
+            else
+              echo "❌ $(basename $whl) 验证失败，删除"
+              rm "$whl"
+            fi
+            echo "---"
+          done
+          
+          remaining_files=$(ls dist/*.whl 2>/dev/null | wc -l)
+          if [ "$remaining_files" -eq 0 ]; then
+            echo "❌ 没有有效的 wheel 文件"
+            exit 1
+          fi
+          
+          echo "=== 准备上传的文件 ==="
+          ls -la dist/
 
-    # 检查基本结构
-    files = zf.namelist()
-    has_metadata = any('METADATA' in f for f in files)
-    has_wheel = any('WHEEL' in f for f in files)
+      - name: Upload to PyPI
+        env:
+          TWINE_USERNAME: __token__
+          TWINE_PASSWORD: ${{ secrets.PYPI_API_TOKEN }}
+        run: |
+          python -m twine upload --skip-existing dist/*.whl --verbose
 
-    if not (has_metadata and has_wheel):
-      print('❌ 缺少必要的元数据文件')
-      sys.exit(1)
+  release:
+    needs: [publish]
+    runs-on: ubuntu-latest
+    if: startsWith(github.ref, 'refs/tags/')
 
-    print('✅ ZIP 结构正常')
+    steps:
+      - uses: actions/checkout@v4
 
-except zipfile.BadZipFile as e:
-  print('❌ ZIP 文件损坏:', e)
-  sys.exit(1)
-except Exception as e:
-  print('❌ 验证失败:', e)
-  sys.exit(1)
-  " || { echo "❌ $(basename $whl) ZIP 验证失败，删除"; rm "$whl"; continue; }
-  
-  # 使用 twine 验证
-  if python -m twine check "$whl"; then
-  echo "✅ $(basename $whl) 验证通过"
-  else
-  echo "❌ $(basename $whl) 验证失败，删除"
-  rm "$whl"
-  fi
-  echo "---"
-  done
-  
-  # 检查是否还有有效文件
-  remaining_files=$(ls dist/*.whl 2>/dev/null | wc -l)
-  if [ "$remaining_files" -eq 0 ]; then
-  echo "❌ 没有有效的 wheel 文件"
-  exit 1
-  fi
-  
-  echo "=== 准备上传的文件 ==="
-  ls -la dist/
+      - name: Download all wheels for release
+        uses: actions/download-artifact@v4
+        with:
+          path: release_dist
+          pattern: wheels-*
+          merge-multiple: true
 
-- name: Upload to PyPI
-  env:
-    TWINE_USERNAME: __token__
-    TWINE_PASSWORD: ${{ secrets.PYPI_API_TOKEN }}
-  run: |
-    python -m twine upload --skip-existing dist/*.whl --verbose
-
-# 可选：上传到 TestPyPI 进行测试
-# - name: Upload to TestPyPI
-#   env:
-#     TWINE_USERNAME: __token__
-#     TWINE_PASSWORD: ${{ secrets.TEST_PYPI_API_TOKEN }}
-#   run: |
-#     python -m twine upload --repository testpypi --skip-existing dist/*.whl --verbose
-
-# 可选：创建 GitHub Release
-release:
-  needs: [publish]
-  runs-on: ubuntu-latest
-  if: startsWith(github.ref, 'refs/tags/')
-
-  steps:
-    - uses: actions/checkout@v4
-
-    - name: Download all wheels for release
-      uses: actions/download-artifact@v4
-      with:
-        path: release_dist
-        pattern: wheels-*
-        merge-multiple: true
-
-    - name: Create GitHub Release
-      uses: softprops/action-gh-release@v1
-      with:
-        files: release_dist/*.whl
-        draft: false
-        prerelease: false
-        generate_release_notes: true
-      env:
-        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v1
+        with:
+          files: release_dist/*.whl
+          draft: false
+          prerelease: false
+          generate_release_notes: true
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
