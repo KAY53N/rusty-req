@@ -13,7 +13,7 @@ url = "2.5.4"
 
 [dependencies.pyo3]
 version = "0.20"
-features = [ "extension-module", "abi3-py37",]
+features = [ "extension-module", "abi3-py39",]
 
 [dependencies.pyo3-asyncio]
 version = "0.20"
