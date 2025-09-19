@@ -51,12 +51,6 @@ jobs:
             pip install maturin==1.9.2
           CIBW_ENVIRONMENT_MACOS: "MACOSX_DEPLOYMENT_TARGET=10.12"
           CIBW_BUILD_COMMAND: "maturin build --release --interpreter python"
-          CIBW_BUILD_COMMAND_MACOS: |
-            if [[ "$(uname -m)" == "arm64" ]]; then
-              maturin build --release --target aarch64-apple-darwin --interpreter python
-            else
-              maturin build --release --target x86_64-apple-darwin --interpreter python
-            fi
           CIBW_REPAIR_WHEEL_COMMAND_LINUX: "auditwheel repair -w {dest_dir} {wheel}"
 
       - name: Verify wheels
