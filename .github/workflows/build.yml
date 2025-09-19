@@ -50,43 +50,43 @@ jobs:
           pip install cibuildwheel==2.16.2 maturin==1.9.2
 
       - name: Build wheels with cibuildwheel
+        shell: bash
         run: |
+          # 构建 wheel
           cibuildwheel --output-dir wheelhouse . 2>&1 | tee build.log
-          BUILD_EXIT_CODE=${PIPESTATUS[0]} # Capture the exit code of cibuildwheel
+          BUILD_EXIT_CODE=${PIPESTATUS[0]} # 捕获 cibuildwheel 的退出码
           
           echo "=== Build completed with exit code: $BUILD_EXIT_CODE ==="
           echo "=== Build log contents ==="
           cat build.log
           
+          # 检查 wheel 是否生成
           if [ -d wheelhouse ] && [ "$(ls -1 wheelhouse/*.whl 2>/dev/null | wc -l)" -gt 0 ]; then
             echo "✅ Wheels generated successfully"
             exit 0
           else
             echo "❌ No wheels generated or build failed"
-            exit $BUILD_EXIT_CODE # Fail the step if cibuildwheel failed or no wheels were generated
+            exit $BUILD_EXIT_CODE
           fi
         env:
-          # CIBW_BUILD: Define which Python versions to build for
+          # 定义要构建的 Python 版本
           CIBW_BUILD: ${{ matrix.os == 'windows-latest' && 'cp39-* cp310-* cp311-* cp312-* cp313-*' || 'cp39-* cp310-* cp311-* cp312-* cp313-*' }}
-          # CIBW_SKIP: Skip specific architectures or platforms
+          # 跳过特定平台或架构
           CIBW_SKIP: "*-musllinux_* pp* *-win32"
-          # CIBW_ARCHS: Specify architectures for each OS
+          # 指定架构
           CIBW_ARCHS_MACOS: "x86_64 arm64"
           CIBW_ARCHS_LINUX: "x86_64"
           CIBW_ARCHS_WINDOWS: "AMD64"
-          # CIBW_MANYLINUX_X86_64_IMAGE: Specify manylinux image
+          # manylinux 镜像
           CIBW_MANYLINUX_X86_64_IMAGE: "manylinux_2_28"
-          # CIBW_ENVIRONMENT: General environment variables (macOS deployment target)
+          # macOS 部署目标
           CIBW_ENVIRONMENT: "MACOSX_DEPLOYMENT_TARGET=10.12"
-          # CIBW_BUILD_COMMAND: Command to build the extension
+          # 构建命令
           CIBW_BUILD_COMMAND: "maturin build --release --interpreter python"
-          # CIBW_REPAIR_WHEEL_COMMAND_LINUX: Command to repair wheels on Linux
+          # Linux 修复 wheel
           CIBW_REPAIR_WHEEL_COMMAND_LINUX: "python -m auditwheel repair -w {dest_dir} {wheel}"
-          # OpenSSL environment variables (cibuildwheel takes care of this via CIBW_BEFORE_BUILD if needed, but for maturin, it's often handled by system paths)
-          # Removed specific CIBW_ENVIRONMENT_* for OpenSSL as they are handled by direct `brew` or `apt` installs and system `pkg-config`.
-          # CIBW_BEFORE_BUILD: Keep minimal, direct system setup is preferred
-          # Removed specific CIBW_BEFORE_BUILD_* as dependencies are handled in separate steps.
-          CIBW_BEFORE_BUILD: "" # No general CIBW_BEFORE_BUILD needed, handled by preceding steps.
+          # 不需要额外的 CIBW_BEFORE_BUILD
+          CIBW_BEFORE_BUILD: ""
 
       - name: Verify wheels
         run: |
