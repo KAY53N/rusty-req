@@ -24,15 +24,17 @@ jobs:
           rustup target add x86_64-apple-darwin
           rustup target add aarch64-apple-darwin
 
-      - name: Install system dependencies
+      - name: Install system dependencies (Linux)
+        if: matrix.os == 'ubuntu-latest'
         run: |
-          if [ "$RUNNER_OS" == "Linux" ]; then
-            sudo apt-get update
-            sudo apt-get install -y pkg-config libssl-dev
-          elif [ "$RUNNER_OS" == "macOS" ]; then
-            # 确保 macOS 有必要的工具
-            brew install pkg-config || true
-          fi
+          sudo apt-get update
+          sudo apt-get install -y pkg-config libssl-dev
+
+      - name: Install system dependencies (macOS)
+        if: matrix.os == 'macos-latest'
+        run: |
+          # 确保 macOS 有必要的工具
+          brew install pkg-config || true
 
       - name: Setup Python
         uses: actions/setup-python@v4
