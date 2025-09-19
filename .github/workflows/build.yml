@@ -115,17 +115,24 @@ jobs:
       - name: Install maturin & twine
         run: pip install --upgrade maturin twine
 
-      - name: Build abi3 wheel
-        run: maturin build --release --strip
+      - name: Build abi3 wheel (Windows 不加 --strip)
+        run: maturin build --release --compatibility abi3
 
-      - name: Verify wheel
-        # 使用 PowerShell 语法遍历 wheel 文件
+      - name: Verify wheel with twine
         shell: pwsh
         run: |
           Get-ChildItem target\wheels\*.whl | ForEach-Object {
             Write-Host "检查 $($_.FullName)"
             twine check $_.FullName
           }
+
+      - name: Verify wheel with unzip
+        shell: bash
+        run: |
+          for whl in target/wheels/*.whl; do
+            echo "🔍 检查 zip 格式: $whl"
+            unzip -t "$whl"
+          done
 
       - name: Upload Windows wheels
         uses: actions/upload-artifact@v4

@@ -1,6 +1,6 @@
 [package]
 name = "rusty-req"
-version = "0.3.90"
+version = "0.3.92"
 edition = "2021"
 license = "MIT"
 
