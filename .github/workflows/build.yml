@@ -237,34 +237,78 @@ jobs:
           path: windows_wheels
           pattern: wheels-windows-*
 
-      - name: List all wheels separately
+      - name: Install twine and verification tools
         run: |
-          echo "Linux wheels:"
-          find linux_wheels -name "*.whl" | xargs ls -la
-          echo ""
-          echo "macOS wheels:"
-          find macos_wheels -name "*.whl" | xargs ls -la
-          echo ""
-          echo "Windows wheels:"
-          find windows_wheels -name "*.whl" | xargs ls -la
+          pip install twine wheel
 
-      - name: Upload to PyPI separately
+      - name: List all downloaded wheels
+        run: |
+          echo "=== 所有下载的 wheel 文件 ==="
+          find . -name "*.whl" -exec ls -la {} \;
+          echo "总文件数: $(find . -name "*.whl" | wc -l)"
+
+      - name: Verify all wheels
+        run: |
+          echo "=== 验证 Linux wheels ==="
+          for wheel in $(find linux_wheels -name "*.whl"); do
+            if python -m wheel unpack "$wheel" -d /tmp/test_linux 2>/dev/null; then
+              rm -rf /tmp/test_linux
+              echo "✅ $wheel 验证通过"
+            else
+              echo "❌ $wheel 验证失败"
+            fi
+          done
+          
+          echo "=== 验证 macOS wheels ==="
+          for wheel in $(find macos_wheels -name "*.whl"); do
+            if python -m wheel unpack "$wheel" -d /tmp/test_macos 2>/dev/null; then
+              rm -rf /tmp/test_macos
+              echo "✅ $wheel 验证通过"
+            else
+              echo "❌ $wheel 验证失败"
+            fi
+          done
+          
+          echo "=== 验证 Windows wheels ==="
+          for wheel in $(find windows_wheels -name "*.whl"); do
+            if python -m wheel unpack "$wheel" -d /tmp/test_windows 2>/dev/null; then
+              rm -rf /tmp/test_windows
+              echo "✅ $wheel 验证通过"
+            else
+              echo "❌ $wheel 验证失败，跳过上传"
+            fi
+          done
+
+      - name: Upload to PyPI
         env:
           TWINE_USERNAME: __token__
           TWINE_PASSWORD: ${{ secrets.PYPI_API_TOKEN }}
         run: |
-          echo "上传 Linux wheels:"
-          twine upload --skip-existing linux_wheels/**/*.whl --verbose
+          echo "=== 上传 Linux wheels ==="
+          for wheel in $(find linux_wheels -name "*.whl"); do
+            echo "上传: $wheel"
+            twine upload --skip-existing "$wheel" --verbose
+          done
           
-          echo "上传 macOS wheels:"
-          twine upload --skip-existing macos_wheels/**/*.whl --verbose
+          echo "=== 上传 macOS wheels ==="
+          for wheel in $(find macos_wheels -name "*.whl"); do
+            echo "上传: $wheel"
+            twine upload --skip-existing "$wheel" --verbose
+          done
           
-          echo "上传 Windows wheels (跳过有问题的):"
-          for wheel in windows_wheels/**/*.whl; do
-            if [[ ! "$wheel" == *"win_amd64.whl" ]]; then
+          echo "=== 上传验证通过的 Windows wheels ==="
+          for wheel in $(find windows_wheels -name "*.whl"); do
+            # 再次验证确保文件完好
+            if python -m wheel unpack "$wheel" -d /tmp/upload_test 2>/dev/null; then
+              rm -rf /tmp/upload_test
               echo "上传: $wheel"
               twine upload --skip-existing "$wheel" --verbose
             else
-              echo "跳过有问题的 Windows wheel: $wheel"
+              echo "跳过验证失败的 Windows wheel: $wheel"
             fi
           done
+
+      - name: Cleanup
+        run: |
+          # 清理可能的临时文件
+          rm -rf /tmp/test_* /tmp/upload_test
