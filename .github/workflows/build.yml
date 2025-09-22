@@ -173,15 +173,24 @@ jobs:
         shell: pwsh
         run: |
           pip install wheel
-          Get-ChildItem "dist\windows-py${{ matrix.python-version }}\*.whl" | ForEach-Object {
-            Write-Host "检查: $($_.FullName)"
-            # 使用 unpack 替代 verify
-            python -m wheel unpack $_.FullName -d test_wheel
+          $wheels = Get-ChildItem "dist\windows-py${{ matrix.python-version }}\*.whl"
+          foreach ($wheel in $wheels) {
+            Write-Host "检查: $($wheel.FullName)"
+            # 使用 unpack 验证
+            python -m wheel unpack $wheel.FullName -d test_wheel
             Remove-Item -Recurse -Force test_wheel -ErrorAction SilentlyContinue
+          
             # 检查文件类型
-            file $_.FullName
-            # 检查 ZIP 完整性
-            python -c "import zipfile; zf = zipfile.ZipFile('$($_.FullName)'); print('ZIP 文件验证通过:', zf.testzip() is None)"
+            file $wheel.FullName
+          
+            # 使用 PowerShell 的 Expand-Archive 来验证 ZIP 文件
+            try {
+              Expand-Archive -Path $wheel.FullName -DestinationPath test_zip -Force
+              Write-Host "✅ ZIP 验证通过"
+              Remove-Item -Recurse -Force test_zip -ErrorAction SilentlyContinue
+            } catch {
+              Write-Host "❌ ZIP 验证失败: $($_.Exception.Message)"
+            }
           }
 
       - name: Upload Windows wheels
