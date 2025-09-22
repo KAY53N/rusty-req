@@ -7,11 +7,9 @@ use crate::request::{execute_with_join_all, execute_with_select_all, RequestItem
 use crate::network::{HttpVersion};
 use serde_json::Value;
 use url::Url;
-use crate::network::SslVerify;
-use crate::{ConcurrencyMode, ProxyConfig, GLOBAL_CLIENT, GLOBAL_PROXY};
+use crate::{ConcurrencyMode, ProxyConfig, DEFAULT_USER_AGENT, GLOBAL_CLIENT, GLOBAL_PROXY};
 use crate::debug::debug_log;
 use crate::utils::{format_datetime, py_to_json};
-
 
 pub(crate) async fn create_reqwest_client(
     request_url: &str,
@@ -24,7 +22,7 @@ pub(crate) async fn create_reqwest_client(
         .gzip(true)
         .brotli(true)
         .deflate(true)
-        .user_agent("Rust/1.88.0 (6b00bc388) reqwest/0.11.27");
+        .user_agent(&*DEFAULT_USER_AGENT);  // 复用同一个静态变量
 
     builder = http_version.apply_to_builder(builder);
 
