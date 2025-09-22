@@ -1,4 +1,4 @@
-name: 在多平台上测试 rusty-req 安装
+name: Test rusty-req installation on multiple platforms
 
 on:
   workflow_dispatch:
