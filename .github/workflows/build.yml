@@ -59,9 +59,8 @@ jobs:
           cargo clean
           $PYTHON_BIN/maturin build --release --manylinux 2_28 --interpreter $PYTHON_BIN/python --out "$OUTPUT_DIR"
 
-      - name: Verify wheel integrity
+      - name: Verify wheel integrity (Linux)
         run: |
-          # 找到正确的 Python 解释器
           PYTHON_VERSION=${{ matrix.python-version }}
           PYTHON_TAG="cp${PYTHON_VERSION//./}-cp${PYTHON_VERSION//./}"
           PYTHON_DIR=""
@@ -78,7 +77,13 @@ jobs:
           $PYTHON_BIN/pip install wheel
           for wheel in /tmp/wheels/linux-py${{ matrix.python-version }}/*.whl; do
             echo "检查: $wheel"
-            $PYTHON_BIN/python -m wheel verify "$wheel"
+            # 使用 unpack 来验证 wheel 文件完整性
+            $PYTHON_BIN/python -m wheel unpack "$wheel" -d /tmp/test_wheel
+            rm -rf /tmp/test_wheel
+            # 检查文件类型
+            file "$wheel"
+            # 检查 ZIP 文件完整性
+            $PYTHON_BIN/python -c "import zipfile; zf = zipfile.ZipFile('$wheel'); print('ZIP 文件验证通过:', zf.testzip() is None)"
           done
 
       - name: Upload Linux wheels
@@ -96,20 +101,20 @@ jobs:
       max-parallel: 3
     steps:
       - uses: actions/checkout@v4
-      
+
       - name: Setup Rust
         uses: dtolnay/rust-toolchain@stable
         with:
           targets: ${{ matrix.target }}
-      
+
       - name: Setup Python
         uses: actions/setup-python@v4
         with:
           python-version: ${{ matrix.python-version }}
-      
+
       - name: Install maturin
         run: pip install maturin==1.9.2
-      
+
       - name: Build wheel
         run: |
           OUTPUT_DIR="dist/macos-${{ matrix.target }}-py${{ matrix.python-version }}"
@@ -117,15 +122,20 @@ jobs:
           cargo clean
           maturin build --release --target ${{ matrix.target }} --interpreter python --out $OUTPUT_DIR
 
-      - name: Verify wheel integrity
+      - name: Verify wheel integrity (macOS)
         run: |
           pip install wheel
-          # macOS - 修正缩进
           for wheel in dist/macos-${{ matrix.target }}-py${{ matrix.python-version }}/*.whl; do
             echo "检查: $wheel"
-            python -m wheel verify "$wheel"
+            # 使用 unpack 替代 verify
+            python -m wheel unpack "$wheel" -d /tmp/test_wheel
+            rm -rf /tmp/test_wheel
+            # 检查文件信息
+            file "$wheel"
+            # 检查 ZIP 完整性
+            python -c "import zipfile; zf = zipfile.ZipFile('$wheel'); print('ZIP 文件验证通过:', zf.testzip() is None)"
           done
-      
+
       - name: Upload macOS wheels
         uses: actions/upload-artifact@v4
         with:
@@ -139,39 +149,41 @@ jobs:
         python-version: ["3.9", "3.10", "3.11", "3.12"]
     steps:
       - uses: actions/checkout@v4
-      
+
       - name: Setup Rust
         uses: dtolnay/rust-toolchain@stable
-      
+
       - name: Setup Python
         uses: actions/setup-python@v4
         with:
           python-version: ${{ matrix.python-version }}
-      
+
       - name: Install maturin
         run: pip install maturin==1.9.2
-      
+
       - name: Build wheel
         shell: pwsh
         run: |
           $OUTPUT_DIR = "dist\windows-py${{ matrix.python-version }}"
           New-Item -ItemType Directory -Path $OUTPUT_DIR -Force
           cargo clean
-          # 添加更多参数确保构建正确性
           maturin build --release --interpreter python --out $OUTPUT_DIR --strip
 
-      - name: Verify wheel integrity
-        shell: pwsh  # 添加这行
+      - name: Verify wheel integrity (Windows)
+        shell: pwsh
         run: |
           pip install wheel
           Get-ChildItem "dist\windows-py${{ matrix.python-version }}\*.whl" | ForEach-Object {
             Write-Host "检查: $($_.FullName)"
-            python -m wheel verify $_.FullName
-            if ($LASTEXITCODE -ne 0) {
-              Write-Host "❌ $($_.FullName) 验证失败"
-            }
+            # 使用 unpack 替代 verify
+            python -m wheel unpack $_.FullName -d test_wheel
+            Remove-Item -Recurse -Force test_wheel -ErrorAction SilentlyContinue
+            # 检查文件类型
+            file $_.FullName
+            # 检查 ZIP 完整性
+            python -c "import zipfile; zf = zipfile.ZipFile('$($_.FullName)'); print('ZIP 文件验证通过:', zf.testzip() is None)"
           }
-      
+
       - name: Upload Windows wheels
         uses: actions/upload-artifact@v4
         with:
@@ -182,7 +194,7 @@ jobs:
     needs: [build-linux, build-macos, build-windows]
     runs-on: ubuntu-latest
     if: success() && (startsWith(github.ref, 'refs/tags/') || github.event_name == 'release')
-    
+
     steps:
       - uses: actions/checkout@v4
 
@@ -193,39 +205,39 @@ jobs:
           pattern: wheels-*
           merge-multiple: true
 
-      - name: List and verify all wheels
+      - name: Install verification tools
         run: |
-          echo "所有下载的文件："
-          ls -la final_dist/
-          echo "验证 wheel 文件完整性："
-          pip install wheel
-          for wheel in final_dist/*.whl; do
-          echo "检查: $wheel"
-          python -m wheel verify "$wheel" || echo "❌ $wheel 验证失败"
-          # 显示文件信息
-          file "$wheel"
-          # 检查是否是有效的 ZIP 文件
-          unzip -t "$wheel" || echo "❌ $wheel ZIP 验证失败"
-          done
+          pip install wheel twine
 
       - name: List and verify all wheels
         run: |
           echo "所有下载的文件："
-          ls -la final_dist/
+          find final_dist -name "*.whl" | xargs ls -la
           echo "验证 wheel 文件完整性："
-          pip install wheel
           for wheel in final_dist/*.whl; do
             echo "检查: $wheel"
-            python -m wheel verify "$wheel" || echo "❌ $wheel 验证失败"
-            # 显示文件信息
+            # 使用 unpack 验证
+            python -m wheel unpack "$wheel" -d /tmp/final_test
+            rm -rf /tmp/final_test
+            # ZIP 文件完整性检查
+            python -c "
+            import zipfile
+            try:
+              zf = zipfile.ZipFile('$wheel')
+              result = zf.testzip()
+              if result is None:
+                print('✅ ZIP 验证通过: $wheel')
+              else:
+                print('❌ ZIP 验证失败: $wheel -', result)
+            except Exception as e:
+              print('❌ 文件损坏: $wheel -', str(e))
+            "
+            # 文件类型检查
             file "$wheel"
-            # 检查是否是有效的 ZIP 文件
-            unzip -t "$wheel" || echo "❌ $wheel ZIP 验证失败"
           done
 
-      - name: Install twine and check files  # 新增这个步骤
+      - name: Check with twine
         run: |
-          pip install twine
           echo "使用 twine 检查所有文件："
           twine check final_dist/*.whl
 
@@ -234,4 +246,6 @@ jobs:
           TWINE_USERNAME: __token__
           TWINE_PASSWORD: ${{ secrets.PYPI_API_TOKEN }}
         run: |
+          echo "上传文件到 PyPI："
+          ls -la final_dist/*.whl
           twine upload --skip-existing final_dist/*.whl --verbose
