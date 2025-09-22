@@ -1,12 +1,10 @@
 # Changelog
 
 ## [0.4.20] - 2025.09.22
-### Fixed
-- Windows安装不成功问题修复
-
-## [0.3.88] - 2025.09.18
 ### Added
 - ProxyConfig增加trust_env参数，指定是否忽略环境变量
+### Fixed
+- Windows安装不成功问题修复
 
 ## [0.3.85] - 2025.09.15
 ### Added
