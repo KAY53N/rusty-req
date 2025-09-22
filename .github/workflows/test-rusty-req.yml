@@ -35,44 +35,42 @@ jobs:
         python-version: ["3.9", "3.10", "3.11", "3.12"]
 
     steps:
-      - name: 检出代码库
+      - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: 设置 Python 环境
+      - name: Set up Python
         uses: actions/setup-python@v5
         with:
           python-version: ${{ matrix.python-version }}
 
-      - name: 显示平台信息
+      - name: Display platform info
         run: |
-          echo "运行平台: ${{ matrix.os }}"
-          echo "Python 版本: ${{ matrix.python-version }}"
+          echo "Running on: ${{ matrix.os }}"
+          echo "Python version: ${{ matrix.python-version }}"
           python --version
-          python -c "import platform; print(f'平台详情: {platform.platform()}')"
+          python -c "import platform; print(f'Platform: {platform.platform()}')"
 
-      - name: 安装 rusty-req
+      - name: Install rusty-req
         run: |
           pip install --upgrade pip
           pip install rusty-req --no-cache-dir
 
-      - name: 验证安装
+      - name: Verify installation
         run: |
           python -c "
           try:
               import rusty_req
-              print('✅ rusty-req 导入成功')
-              # 尝试获取版本信息，如果不存在也不报错
+              print('rusty-req imported successfully')
               if hasattr(rusty_req, '__version__'):
-                  print(f'版本: {rusty_req.__version__}')
+                  print(f'Version: {rusty_req.__version__}')
               else:
-                  print('ℹ️  模块没有 __version__ 属性')
-                  # 检查其他属性来确认模块功能正常
-                  print(f'模块内容: {dir(rusty_req)}')
+                  print('Module loaded but no version attribute')
+                  print(f'Module contents: {[attr for attr in dir(rusty_req) if not attr.startswith(__)]}')
           except ImportError as e:
-              print(f'❌ 导入失败: {e}')
+              print(f'Import failed: {e}')
               exit(1)
           except Exception as e:
-              print(f'⚠️  其他错误: {e}')
+              print(f'Error: {e}')
               exit(1)
           "
 
@@ -82,43 +80,41 @@ jobs:
     runs-on: ${{ github.event.inputs.platform }}
 
     steps:
-      - name: 检出代码库
+      - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: 设置 Python 环境
+      - name: Set up Python
         uses: actions/setup-python@v5
         with:
           python-version: ${{ github.event.inputs.python-version }}
 
-      - name: 显示平台信息
+      - name: Display platform info
         run: |
-          echo "运行平台: ${{ github.event.inputs.platform }}"
-          echo "Python 版本: ${{ github.event.inputs.python-version }}"
+          echo "Running on: ${{ github.event.inputs.platform }}"
+          echo "Python version: ${{ github.event.inputs.python-version }}"
           python --version
-          python -c "import platform; print(f'平台详情: {platform.platform()}')"
+          python -c "import platform; print(f'Platform: {platform.platform()}')"
 
-      - name: 安装 rusty-req
+      - name: Install rusty-req
         run: |
           pip install --upgrade pip
           pip install rusty-req --no-cache-dir
 
-      - name: 验证安装
+      - name: Verify installation
         run: |
           python -c "
           try:
               import rusty_req
-              print('✅ rusty-req 导入成功')
-              # 尝试获取版本信息，如果不存在也不报错
+              print('rusty-req imported successfully')
               if hasattr(rusty_req, '__version__'):
-                  print(f'版本: {rusty_req.__version__}')
+                  print(f'Version: {rusty_req.__version__}')
               else:
-                  print('ℹ️  模块没有 __version__ 属性')
-                  # 检查模块是否包含预期的方法
-                  print('模块已成功加载，但缺少版本属性')
+                  print('Module loaded but no version attribute')
+                  print(f'Module contents: {[attr for attr in dir(rusty_req) if not attr.startswith(__)]}')
           except ImportError as e:
-              print(f'❌ 导入失败: {e}')
+              print(f'Import failed: {e}')
               exit(1)
           except Exception as e:
-              print(f'⚠️  其他错误: {e}')
+              print(f'Error: {e}')
               exit(1)
           "
