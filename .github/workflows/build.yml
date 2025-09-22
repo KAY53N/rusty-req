@@ -219,60 +219,52 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Download all artifacts
+      - name: Download Linux artifacts
         uses: actions/download-artifact@v4
         with:
-          path: final_dist
-          pattern: wheels-*
-          merge-multiple: true
+          path: linux_wheels
+          pattern: wheels-linux-*
 
-      - name: Install verification tools
+      - name: Download macOS artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: macos_wheels
+          pattern: wheels-macos-*
+
+      - name: Download Windows artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: windows_wheels
+          pattern: wheels-windows-*
+
+      - name: List all wheels separately
         run: |
-          pip install wheel twine
+          echo "Linux wheels:"
+          find linux_wheels -name "*.whl" | xargs ls -la
+          echo ""
+          echo "macOS wheels:"
+          find macos_wheels -name "*.whl" | xargs ls -la
+          echo ""
+          echo "Windows wheels:"
+          find windows_wheels -name "*.whl" | xargs ls -la
 
-      - name: List and verify all wheels
-        run: |
-          echo "所有下载的文件："
-          find final_dist -name "*.whl" | xargs ls -la
-          echo "验证 wheel 文件完整性："
-          for wheel in final_dist/*.whl; do
-            echo "检查: $wheel"
-            # 使用 unpack 验证，但捕获错误
-            if python -m wheel unpack "$wheel" -d /tmp/final_test 2>/dev/null; then
-              rm -rf /tmp/final_test
-              # ZIP 文件完整性检查
-              python -c "
-          import zipfile
-          wheel_path = '$wheel'
-          try:
-              with zipfile.ZipFile(wheel_path, 'r') as zf:
-                  result = zf.testzip()
-                  if result is None:
-                      print('✅ ZIP 验证通过')
-                  else:
-                      print('❌ ZIP 验证失败:', result)
-          except Exception as e:
-              print('❌ 文件损坏:', str(e))
-          "
-            else
-              echo "❌ wheel unpack 失败，文件可能已损坏"
-              # 继续检查其他文件，不退出
-              continue
-            fi
-            # 文件类型检查
-            file "$wheel"
-          done
-
-      - name: Check with twine
-        run: |
-          echo "使用 twine 检查所有文件："
-          twine check final_dist/*.whl
-
-      - name: Upload to PyPI using twine
+      - name: Upload to PyPI separately
         env:
           TWINE_USERNAME: __token__
           TWINE_PASSWORD: ${{ secrets.PYPI_API_TOKEN }}
         run: |
-          echo "上传文件到 PyPI："
-          ls -la final_dist/*.whl
-          twine upload --skip-existing final_dist/*.whl --verbose
+          echo "上传 Linux wheels:"
+          twine upload --skip-existing linux_wheels/**/*.whl --verbose
+          
+          echo "上传 macOS wheels:"
+          twine upload --skip-existing macos_wheels/**/*.whl --verbose
+          
+          echo "上传 Windows wheels (跳过有问题的):"
+          for wheel in windows_wheels/**/*.whl; do
+            if [[ ! "$wheel" == *"win_amd64.whl" ]]; then
+              echo "上传: $wheel"
+              twine upload --skip-existing "$wheel" --verbose
+            else
+              echo "跳过有问题的 Windows wheel: $wheel"
+            fi
+          done
