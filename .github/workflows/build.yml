@@ -228,19 +228,8 @@ jobs:
             # 使用 unpack 验证
             python -m wheel unpack "$wheel" -d /tmp/final_test
             rm -rf /tmp/final_test
-            # ZIP 文件完整性检查
-            python -c "
-            import zipfile
-            try:
-              zf = zipfile.ZipFile('$wheel')
-              result = zf.testzip()
-              if result is None:
-                print('✅ ZIP 验证通过: $wheel')
-              else:
-                print('❌ ZIP 验证失败: $wheel -', result)
-            except Exception as e:
-              print('❌ 文件损坏: $wheel -', str(e))
-            "
+            # ZIP 文件完整性检查 - 使用单行Python命令
+            python -c "import zipfile; import os; wheel_path = '$wheel'; print(f'检查文件: {wheel_path}'); result = None; try: zf = zipfile.ZipFile(wheel_path); result = zf.testzip(); zf.close(); print('✅ ZIP 验证通过') if result is None else print(f'❌ ZIP 验证失败: {result}'); except Exception as e: print(f'❌ 文件损坏: {e}')"
             # 文件类型检查
             file "$wheel"
           done
