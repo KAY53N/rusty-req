@@ -167,24 +167,18 @@ jobs:
           $OUTPUT_DIR = "dist\windows-py${{ matrix.python-version }}"
           New-Item -ItemType Directory -Path $OUTPUT_DIR -Force
           cargo clean
-          # 使用更稳定的构建命令，避免文件损坏
+          # 构建 wheel
           maturin build --release --interpreter python --out $OUTPUT_DIR --strip
-          # 构建完成后立即验证文件完整性
+          
+          # 修复 ZIP 文件：重新打包以确保格式正确
           Get-ChildItem "$OUTPUT_DIR\*.whl" | ForEach-Object {
-            Write-Host "立即验证: $($_.FullName)"
-            # 检查文件大小
-            Write-Host "文件大小: $($_.Length) bytes"
-            # 简单的ZIP文件检查
-            try {
-              Expand-Archive -Path $_.FullName -DestinationPath temp_check -Force
-              Write-Host "✅ 构建后立即验证通过"
-              Remove-Item -Recurse -Force temp_check -ErrorAction SilentlyContinue
-            } catch {
-              Write-Host "❌ 构建后验证失败: $($_.Exception.Message)"
-              # 如果验证失败，删除损坏的文件
-              Remove-Item -Force $_.FullName
-              exit 1
-            }
+            Write-Host "修复 ZIP 文件: $($_.FullName)"
+            $tempDir = "temp_repack"
+            # 解压并重新打包
+            Expand-Archive -Path $_.FullName -DestinationPath $tempDir -Force
+            Remove-Item -Force $_.FullName
+            Compress-Archive -Path "$tempDir\*" -DestinationPath $_.FullName -CompressionLevel Optimal
+            Remove-Item -Recurse -Force $tempDir
           }
 
       - name: Verify wheel integrity (Windows)
