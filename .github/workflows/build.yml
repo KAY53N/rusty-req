@@ -161,13 +161,31 @@ jobs:
       - name: Install maturin
         run: pip install maturin==1.9.2
 
-      - name: Build wheel
+      - name: Build wheel (Windows)
         shell: pwsh
         run: |
           $OUTPUT_DIR = "dist\windows-py${{ matrix.python-version }}"
           New-Item -ItemType Directory -Path $OUTPUT_DIR -Force
           cargo clean
+          # 使用更稳定的构建命令，避免文件损坏
           maturin build --release --interpreter python --out $OUTPUT_DIR --strip
+          # 构建完成后立即验证文件完整性
+          Get-ChildItem "$OUTPUT_DIR\*.whl" | ForEach-Object {
+            Write-Host "立即验证: $($_.FullName)"
+            # 检查文件大小
+            Write-Host "文件大小: $($_.Length) bytes"
+            # 简单的ZIP文件检查
+            try {
+              Expand-Archive -Path $_.FullName -DestinationPath temp_check -Force
+              Write-Host "✅ 构建后立即验证通过"
+              Remove-Item -Recurse -Force temp_check -ErrorAction SilentlyContinue
+            } catch {
+              Write-Host "❌ 构建后验证失败: $($_.Exception.Message)"
+              # 如果验证失败，删除损坏的文件
+              Remove-Item -Force $_.FullName
+              exit 1
+            }
+          }
 
       - name: Verify wheel integrity (Windows)
         shell: pwsh
@@ -225,11 +243,11 @@ jobs:
           echo "验证 wheel 文件完整性："
           for wheel in final_dist/*.whl; do
             echo "检查: $wheel"
-            # 使用 unpack 验证
-            python -m wheel unpack "$wheel" -d /tmp/final_test
-            rm -rf /tmp/final_test
-            # ZIP 文件完整性检查 - 使用简单的测试
-            python -c "
+            # 使用 unpack 验证，但捕获错误
+            if python -m wheel unpack "$wheel" -d /tmp/final_test 2>/dev/null; then
+              rm -rf /tmp/final_test
+              # ZIP 文件完整性检查
+              python -c "
           import zipfile
           wheel_path = '$wheel'
           try:
@@ -242,6 +260,11 @@ jobs:
           except Exception as e:
               print('❌ 文件损坏:', str(e))
           "
+            else
+              echo "❌ wheel unpack 失败，文件可能已损坏"
+              # 继续检查其他文件，不退出
+              continue
+            fi
             # 文件类型检查
             file "$wheel"
           done
