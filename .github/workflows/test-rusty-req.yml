@@ -65,7 +65,9 @@ jobs:
                   print(f'Version: {rusty_req.__version__}')
               else:
                   print('Module loaded but no version attribute')
-                  print(f'Module contents: {[attr for attr in dir(rusty_req) if not attr.startswith(__)]}')
+                  # 只显示不以双下划线开头的公共属性
+                  public_attrs = [attr for attr in dir(rusty_req) if not attr.startswith('_')]
+                  print(f'Public attributes: {public_attrs}')
           except ImportError as e:
               print(f'Import failed: {e}')
               exit(1)
@@ -110,7 +112,9 @@ jobs:
                   print(f'Version: {rusty_req.__version__}')
               else:
                   print('Module loaded but no version attribute')
-                  print(f'Module contents: {[attr for attr in dir(rusty_req) if not attr.startswith(__)]}')
+                  # 只显示不以双下划线开头的公共属性
+                  public_attrs = [attr for attr in dir(rusty_req) if not attr.startswith('_')]
+                  print(f'Public attributes: {public_attrs}')
           except ImportError as e:
               print(f'Import failed: {e}')
               exit(1)
