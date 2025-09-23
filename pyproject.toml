@@ -8,7 +8,33 @@ version = "0.4.21"
 description = "⚡ High-performance async HTTP client in Rust with Python bindings for blazing-fast batch requests."
 readme = "README.md"
 requires-python = ">=3.9"
-classifiers = [ "Programming Language :: Python", "Programming Language :: Python :: 3", "Programming Language :: Rust", "Operating System :: Microsoft :: Windows", "Operating System :: POSIX :: Linux", "Operating System :: MacOS :: MacOS X", "License :: OSI Approved :: MIT License", ]
+classifiers = [
+    # 编程语言 - 更新支持 3.13
+    "Programming Language :: Python",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3 :: Only",
+    "Programming Language :: Python :: 3.9",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",  # 新增 3.13 支持
+    "Programming Language :: Rust",
+
+    # 操作系统
+    "Operating System :: Microsoft :: Windows",
+    "Operating System :: POSIX :: Linux",
+    "Operating System :: MacOS :: MacOS X",
+
+    # 主题分类
+    "Topic :: Internet :: WWW/HTTP :: HTTP Clients",
+    "Topic :: Software Development :: Libraries :: Python Modules",
+    "Topic :: System :: Networking",
+    "Framework :: AsyncIO",
+    "Intended Audience :: Developers",
+
+    # 许可证
+    "License :: OSI Approved :: MIT License",
+]
 [[project.authors]]
 name = "KAY53N"
 email = "kaysen820@gmail.com"
@@ -21,6 +47,7 @@ Homepage = "https://github.com/KAY53N/rusty-req"
 Repository = "https://github.com/KAY53N/rusty-req"
 "Bug Tracker" = "https://github.com/KAY53N/rusty-req/issues"
 Documentation = "https://github.com/KAY53N/rusty-req#readme"
+"Changelog" = "https://github.com/KAY53N/rusty-req/blob/main/CHANGELOG.md"
 
 [tool.maturin]
 bindings = "pyo3"
