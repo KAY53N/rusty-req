@@ -1,5 +1,9 @@
 # Changelog
 
+## [0.4.21] - 2025.09.23
+### Added
+- 添加Python类型存根文件
+
 ## [0.4.20] - 2025.09.22
 ### Added
 - ProxyConfig增加trust_env参数，指定是否忽略环境变量

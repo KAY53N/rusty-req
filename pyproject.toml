@@ -4,7 +4,7 @@ build-backend = "maturin"
 
 [project]
 name = "rusty-req"
-version = "0.4.20"
+version = "0.4.21"
 description = "⚡ High-performance async HTTP client in Rust with Python bindings for blazing-fast batch requests."
 readme = "README.md"
 requires-python = ">=3.9"
@@ -25,3 +25,4 @@ Documentation = "https://github.com/KAY53N/rusty-req#readme"
 [tool.maturin]
 bindings = "pyo3"
 module-name = "rusty_req"
+include = [ "rusty_req.pyi", "README.md", "README.zh.md", "CHANGELOG.md",]
