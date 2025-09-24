@@ -8,7 +8,7 @@ version = "0.4.22"
 description = "⚡ High-performance async HTTP client in Rust with Python bindings for blazing-fast batch requests."
 readme = "README.md"
 requires-python = ">=3.9"
-classifiers = [ "Programming Language :: Python", "Programming Language :: Python :: 3", "Programming Language :: Python :: 3 :: Only", "Programming Language :: Python :: 3.9", "Programming Language :: Python :: 3.10", "Programming Language :: Python :: 3.11", "Programming Language :: Python :: 3.12", "Programming Language :: Python :: 3.13", "Programming Language :: Rust", "Operating System :: Microsoft :: Windows", "Operating System :: POSIX :: Linux", "Operating System :: MacOS :: MacOS X", "Topic :: Internet :: WWW/HTTP :: HTTP Clients", "Topic :: Software Development :: Libraries :: Python Modules", "Topic :: System :: Networking", "Framework :: AsyncIO", "Intended Audience :: Developers", "License :: OSI Approved :: MIT License",]
+classifiers = [ "Programming Language :: Python", "Programming Language :: Python :: 3", "Programming Language :: Python :: 3 :: Only", "Programming Language :: Python :: 3.9", "Programming Language :: Python :: 3.10", "Programming Language :: Python :: 3.11", "Programming Language :: Python :: 3.12", "Programming Language :: Python :: 3.13", "Programming Language :: Rust", "Operating System :: Microsoft :: Windows", "Operating System :: POSIX :: Linux", "Operating System :: MacOS :: MacOS X",  "Topic :: Software Development :: Libraries :: Python Modules", "Topic :: System :: Networking", "Framework :: AsyncIO", "Intended Audience :: Developers", "License :: OSI Approved :: MIT License",]
 [[project.authors]]
 name = "KAY53N"
 email = "kaysen820@gmail.com"
