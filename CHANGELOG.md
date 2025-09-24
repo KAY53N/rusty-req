@@ -1,5 +1,10 @@
 # Changelog
 
+## [0.4.22] - 2025.09.24
+### Added
+- 完善pyproject
+- 更新README
+
 ## [0.4.21] - 2025.09.23
 ### Added
 - 添加Python类型存根文件
