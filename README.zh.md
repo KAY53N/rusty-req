@@ -1,8 +1,15 @@
 # rusty-req
 
 [![PyPI 版本](https://img.shields.io/pypi/v/rusty-req)](https://pypi.org/project/rusty-req/)
-[![GitHub 下载量](https://img.shields.io/github/downloads/KAY53N/rusty-req/total)](https://github.com/KAY53N/rusty-req/releases)
+[![PyPI 下载量](https://img.shields.io/pypi/dm/rusty-req)](https://pypi.org/project/rusty-req/)
 [![许可证: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+[![Python 版本](https://img.shields.io/badge/python-3.9%2B-blue)](https://www.python.org/downloads/)
+[![GitHub 星标](https://img.shields.io/github/stars/KAY53N/rusty-req)](https://github.com/KAY53N/rusty-req/stargazers)
+[![GitHub 复刻](https://img.shields.io/github/forks/KAY53N/rusty-req)](https://github.com/KAY53N/rusty-req/network/members)
+[![GitHub 议题](https://img.shields.io/github/issues/KAY53N/rusty-req)](https://github.com/KAY53N/rusty-req/issues)
+[![最后提交](https://img.shields.io/github/last-commit/KAY53N/rusty-req)](https://github.com/KAY53N/rusty-req/commits/main)
+
+基于 Rust 和 Python 的高性能异步请求库...
 
 一个基于 Rust 和 Python 的高性能异步请求库，适用于需要高吞吐量并发 HTTP 请求的场景。核心并发逻辑使用 Rust 实现，并通过 [PyO3](https://pyo3.rs/) 和 [maturin](https://github.com/PyO3/maturin) 封装为 Python 模块，将 Rust 的性能优势与 Python 的易用性结合。
 
