@@ -1,6 +1,6 @@
 # Changelog
 
-## [0.4.24] - 2025.09.25
+## [0.4.25] - 2025.09.25
 ### Added
 - 完善pyproject
 - 更新README

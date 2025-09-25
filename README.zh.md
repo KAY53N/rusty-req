@@ -3,7 +3,7 @@
 [![PyPI version](https://img.shields.io/pypi/v/rusty-req)](https://pypi.org/project/rusty-req/)
 [![PyPI downloads](https://img.shields.io/pypi/dm/rusty-req)](https://pypi.org/project/rusty-req/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
-[![Python versions](https://img.shields.io/pypi/pyversions/rusty-req.svg)](https://pypi.python.org/pypi/rusty-req)
+[![Python versions](https://img.shields.io/badge/python-3.9%2B-blue)](https://www.python.org/downloads/)
 [![GitHub issues](https://img.shields.io/github/issues/KAY53N/rusty-req)](https://github.com/KAY53N/rusty-req/issues)
 [![Build Status](https://github.com/KAY53N/rusty-req/actions/workflows/build.yml/badge.svg)](https://github.com/KAY53N/rusty-req/actions/workflows/build.yml)
 [![Cross Platform Test](https://github.com/KAY53N/rusty-req/actions/workflows/cross-platform-test.yml/badge.svg)](https://github.com/KAY53N/rusty-req/actions/workflows/cross-platform-test.yml)
@@ -412,11 +412,9 @@ if __name__ == "__main__":
 
 查看详细更新内容请访问 [CHANGELOG](CHANGELOG.md)
 
-### &#8627; 点赞的朋友
-[![Stargazers repo roster for @KAY53N/rusty-req](https://reporoster.com/stars/KAY53N/rusty-req)](https://github.com/KAY53N/rusty-req/stargazers)
+## Star History
 
-### &#8627; Fork 本项目的朋友
-[![Forkers repo roster for @KAY53N/rusty-req](https://reporoster.com/forks/KAY53N/rusty-req)](https://github.com/KAY53N/rusty-req/network/members)
+[![Star History Chart](https://api.star-history.com/svg?repos=KAY53N/rusty-req&type=Date)](https://www.star-history.com/#KAY53N/rusty-req&Date)
 
 
 ## 📄 许可证
