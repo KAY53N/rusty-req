@@ -1,4 +1,4 @@
-name: Build and Publish Rust Python Extension
+name: Build
 
 on:
   push:

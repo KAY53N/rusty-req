@@ -1,4 +1,4 @@
-name: Test rusty-req installation on multiple platforms
+name: Cross Platform Test
 
 on:
   workflow_dispatch:
