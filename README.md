@@ -6,7 +6,7 @@
 [![Python versions](https://img.shields.io/pypi/pyversions/rusty-req.svg)](https://pypi.python.org/pypi/rusty-req)
 [![GitHub issues](https://img.shields.io/github/issues/KAY53N/rusty-req)](https://github.com/KAY53N/rusty-req/issues)
 [![Build Status](https://github.com/KAY53N/rusty-req/actions/workflows/build.yml/badge.svg)](https://github.com/KAY53N/rusty-req/actions/workflows/build.yml)
-[![Cross Platform Test](https://github.com/KAY53N/rusty-req/actions/workflows/test-rusty-req.yml/badge.svg)](https://github.com/KAY53N/rusty-req/actions/workflows/test-rusty-req.yml)
+[![Cross Platform Test](https://github.com/KAY53N/rusty-req/actions/workflows/cross-platform-test.yml/badge.svg)](https://github.com/KAY53N/rusty-req/actions/workflows/cross-platform-test.yml)
 
 A high-performance asynchronous request library based on Rust and Python, suitable for scenarios that require high-throughput concurrent HTTP requests. It implements the core concurrent logic in Rust and packages it into a Python module using [PyO3](https://pyo3.rs/) and [maturin](https://github.com/PyO3/maturin), combining Rust's performance with Python's ease of use.
 
