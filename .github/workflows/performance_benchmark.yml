@@ -1,4 +1,4 @@
-name: 性能测试
+name: performance benchmark
 
 on:
   push:
