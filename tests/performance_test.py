@@ -256,14 +256,14 @@ class PerformanceTest:
         try:
             # rusty-req batch
             print("\n📊 Rusty-Req batch performance test")
-            result = await self.test_rusty_req_batch(500, 0.5)
+            result = await self.test_rusty_req_batch(1500, 0.5)
             results["rusty_req_batch"] = result
             await self.cooldown(10)
 
             # httpx async
             print("\n📊 httpx performance test")
             try:
-                results["httpx_async"] = await self.test_httpx_async(500, 0.5)
+                results["httpx_async"] = await self.test_httpx_async(1500, 0.5)
             except Exception as e:
                 print(f"⚠️ httpx test failed: {e}")
             await self.cooldown(10)
@@ -271,7 +271,7 @@ class PerformanceTest:
             # aiohttp async
             print("\n📊 aiohttp performance test")
             try:
-                results["aiohttp"] = await self.test_aiohttp(500, 0.5)
+                results["aiohttp"] = await self.test_aiohttp(1500, 0.5)
             except Exception as e:
                 print(f"⚠️ aiohttp test failed: {e}")
             await self.cooldown(10)
@@ -279,7 +279,7 @@ class PerformanceTest:
             # requests sync
             print("\n📊 requests performance test")
             try:
-                results["requests_sync"] = self.test_requests_sync(500, 0.5)
+                results["requests_sync"] = self.test_requests_sync(1500, 0.5)
             except Exception as e:
                 print(f"⚠️ requests test failed: {e}")
             await self.cooldown(10)
