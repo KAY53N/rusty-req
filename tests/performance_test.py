@@ -12,8 +12,8 @@ from concurrent.futures import ThreadPoolExecutor
 import os
 
 # Global settings
-GLOBAL_CONCURRENCY = 700  # Updated concurrency
-TOTAL_TIMEOUT = 5.0  # Total timeout for all requests
+GLOBAL_CONCURRENCY = 800  # Updated concurrency
+TOTAL_TIMEOUT = 4.0  # Total timeout for all requests
 REQUEST_TIMEOUT = 3.5  # Timeout per request
 
 class PerformanceTest:
@@ -253,7 +253,7 @@ class PerformanceTest:
             # rusty-req batch
             print("\n📊 Rusty-Req batch performance test")
             results["rusty_req_batch"] = await self.test_rusty_req_batch()
-            await self.cooldown(10)
+            await self.cooldown(30)
 
             # httpx async
             print("\n📊 httpx performance test")
@@ -261,7 +261,7 @@ class PerformanceTest:
                 results["httpx_async"] = await self.test_httpx_async()
             except Exception as e:
                 print(f"⚠️ httpx test failed: {e}")
-            await self.cooldown(10)
+            await self.cooldown(30)
 
             # aiohttp async
             print("\n📊 aiohttp performance test")
@@ -269,7 +269,7 @@ class PerformanceTest:
                 results["aiohttp"] = await self.test_aiohttp()
             except Exception as e:
                 print(f"⚠️ aiohttp test failed: {e}")
-            await self.cooldown(10)
+            await self.cooldown(30)
 
             # requests sync
             print("\n📊 requests performance test")
@@ -277,7 +277,7 @@ class PerformanceTest:
                 results["requests_sync"] = self.test_requests_sync()
             except Exception as e:
                 print(f"⚠️ requests test failed: {e}")
-            await self.cooldown(10)
+            await self.cooldown(30)
 
         except Exception as e:
             print(f"❌ Error during tests: {e}")
