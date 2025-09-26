@@ -290,11 +290,11 @@ class PerformanceTest:
 
     async def run_comprehensive_test(self):
         print("=" * 60)
-        print("🎯 Starting rusty-req benchmark")
+        print("🎯 Start rusty-req performance benchmark")
         print("=" * 60)
 
         if not await self.test_httpbin_connectivity():
-            print("❌ httpbin is not available, aborting tests")
+            print("❌ httpbin service not available, aborting tests")
             return {}
 
         rusty_req.set_debug(False)
@@ -302,48 +302,41 @@ class PerformanceTest:
 
         try:
             # rusty-req batch
-            print("\n📊 rusty-req batch benchmark")
+            print("\n📊 Batch request performance test")
             result = await self.test_rusty_req_batch(50, 0.5)
             results["rusty_req_batch"] = result
-            print("   ✅ Completed batch benchmark")
-            await self.cooldown(10)
-
-            # rusty-req single
-            print("\n📊 rusty-req single benchmark")
-            result = await self.test_rusty_req_single(50, 0.5)
-            results["rusty_req_single"] = result
-            print("   ✅ Completed single benchmark")
+            print("   ✅ Completed batch request test")
             await self.cooldown(10)
 
             # httpx
-            print("\n📊 httpx benchmark")
+            print("\n📊 httpx performance test")
             try:
                 results["httpx_async"] = await self.test_httpx_async(50, 0.5)
-                print("   ✅ Completed httpx benchmark")
+                print("   ✅ Completed httpx test")
             except Exception as e:
-                print(f"   ⚠️ httpx benchmark failed: {e}")
+                print(f"   ⚠️ httpx test failed: {e}")
             await self.cooldown(10)
 
             # aiohttp
-            print("\n📊 aiohttp benchmark")
+            print("\n📊 aiohttp performance test")
             try:
                 results["aiohttp"] = await self.test_aiohttp(50, 0.5)
-                print("   ✅ Completed aiohttp benchmark")
+                print("   ✅ Completed aiohttp test")
             except Exception as e:
-                print(f"   ⚠️ aiohttp benchmark failed: {e}")
+                print(f"   ⚠️ aiohttp test failed: {e}")
             await self.cooldown(10)
 
             # requests
-            print("\n📊 requests benchmark")
+            print("\n📊 requests performance test")
             try:
                 results["requests_sync"] = self.test_requests_sync(30, 0.5)
-                print("   ✅ Completed requests benchmark")
+                print("   ✅ Completed requests test")
             except Exception as e:
-                print(f"   ⚠️ requests benchmark failed: {e}")
+                print(f"   ⚠️ requests test failed: {e}")
             await self.cooldown(10)
 
         except Exception as e:
-            print(f"❌ Error during benchmark: {e}")
+            print(f"❌ Error during tests: {e}")
             import traceback
             traceback.print_exc()
 
