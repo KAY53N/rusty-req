@@ -1,4 +1,4 @@
-name: rusty-req 性能测试
+name: 性能测试
 
 on:
   push:
