@@ -11,6 +11,10 @@ import requests
 from concurrent.futures import ThreadPoolExecutor
 import os
 
+# Global benchmark settings
+CONCURRENCY = 500   # number of concurrent requests
+DELAY = 0.5         # delay seconds for httpbin /delay endpoint
+
 
 class PerformanceTest:
     def __init__(self):
@@ -22,8 +26,6 @@ class PerformanceTest:
         """Cooldown between tests"""
         print(f"⏳ Cooling down for {seconds} seconds, waiting for httpbin to recover...")
         await asyncio.sleep(seconds)
-        # If you are running httpbin via docker, you can replace with:
-        # os.system("docker restart httpbin")
 
     async def test_httpbin_connectivity(self):
         """Check httpbin connectivity"""
@@ -61,7 +63,7 @@ class PerformanceTest:
             print(f"❌ httpbin connectivity failed: {e}")
             return False
 
-    async def test_rusty_req_batch(self, num_requests: int = 100, delay: float = 1.0) -> Dict[str, Any]:
+    async def test_rusty_req_batch(self, num_requests: int = CONCURRENCY, delay: float = DELAY) -> Dict[str, Any]:
         print(f"🚀 Testing rusty-req batch mode ({num_requests} requests, {delay}s delay)...")
 
         requests_list = [
@@ -121,64 +123,7 @@ class PerformanceTest:
             "avg_response_time": total_time / num_requests
         }
 
-    async def test_rusty_req_single(self, num_requests: int = 100, delay: float = 1.0) -> Dict[str, Any]:
-        print(f"🚀 Testing rusty-req single mode ({num_requests} requests, {delay}s delay)...")
-
-        start_time = time.perf_counter()
-        successful = 0
-        failed = 0
-
-        tasks = [
-            rusty_req.fetch_single(
-                url=f"{self.httpbin_url}/delay/{delay}",
-                method="GET",
-                timeout=delay + 2.0,
-                tag=f"single-req-{i}"
-            )
-            for i in range(num_requests)
-        ]
-        responses = await asyncio.gather(*tasks, return_exceptions=True)
-
-        end_time = time.perf_counter()
-
-        for response in responses:
-            if isinstance(response, Exception):
-                failed += 1
-            elif isinstance(response, dict):
-                http_status = response.get("http_status")
-                if isinstance(http_status, str):
-                    http_status = int(http_status) if http_status.isdigit() else 0
-
-                exception = response.get("exception", {})
-                if isinstance(exception, str):
-                    try:
-                        exception = json.loads(exception) if exception else {}
-                    except json.JSONDecodeError:
-                        exception = {}
-
-                has_error = exception.get("type") is not None
-                if http_status == 200 and not has_error:
-                    successful += 1
-                else:
-                    failed += 1
-            else:
-                failed += 1
-
-        total_time = end_time - start_time
-
-        return {
-            "library": "rusty-req",
-            "mode": "single",
-            "total_requests": num_requests,
-            "successful": successful,
-            "failed": failed,
-            "success_rate": (successful / num_requests) * 100,
-            "total_time": total_time,
-            "requests_per_second": num_requests / total_time,
-            "avg_response_time": total_time / num_requests
-        }
-
-    async def test_httpx_async(self, num_requests: int = 100, delay: float = 1.0) -> Dict[str, Any]:
+    async def test_httpx_async(self, num_requests: int = CONCURRENCY, delay: float = DELAY) -> Dict[str, Any]:
         print(f"🚀 Testing httpx async ({num_requests} requests, {delay}s delay)...")
 
         start_time = time.perf_counter()
@@ -214,7 +159,7 @@ class PerformanceTest:
             "avg_response_time": total_time / num_requests
         }
 
-    async def test_aiohttp(self, num_requests: int = 100, delay: float = 1.0) -> Dict[str, Any]:
+    async def test_aiohttp(self, num_requests: int = CONCURRENCY, delay: float = DELAY) -> Dict[str, Any]:
         print(f"🚀 Testing aiohttp ({num_requests} requests, {delay}s delay)...")
 
         start_time = time.perf_counter()
@@ -255,7 +200,7 @@ class PerformanceTest:
             "avg_response_time": total_time / num_requests
         }
 
-    def test_requests_sync(self, num_requests: int = 50, delay: float = 1.0) -> Dict[str, Any]:
+    def test_requests_sync(self, num_requests: int = CONCURRENCY, delay: float = DELAY) -> Dict[str, Any]:
         print(f"🚀 Testing requests sync ({num_requests} requests, {delay}s delay)...")
 
         def make_request():
@@ -303,7 +248,7 @@ class PerformanceTest:
         try:
             # rusty-req batch
             print("\n📊 Batch request performance test")
-            result = await self.test_rusty_req_batch(50, 0.5)
+            result = await self.test_rusty_req_batch(CONCURRENCY, DELAY)
             results["rusty_req_batch"] = result
             print("   ✅ Completed batch request test")
             await self.cooldown(10)
@@ -311,7 +256,7 @@ class PerformanceTest:
             # httpx
             print("\n📊 httpx performance test")
             try:
-                results["httpx_async"] = await self.test_httpx_async(50, 0.5)
+                results["httpx_async"] = await self.test_httpx_async(CONCURRENCY, DELAY)
                 print("   ✅ Completed httpx test")
             except Exception as e:
                 print(f"   ⚠️ httpx test failed: {e}")
@@ -320,7 +265,7 @@ class PerformanceTest:
             # aiohttp
             print("\n📊 aiohttp performance test")
             try:
-                results["aiohttp"] = await self.test_aiohttp(50, 0.5)
+                results["aiohttp"] = await self.test_aiohttp(CONCURRENCY, DELAY)
                 print("   ✅ Completed aiohttp test")
             except Exception as e:
                 print(f"   ⚠️ aiohttp test failed: {e}")
@@ -329,7 +274,7 @@ class PerformanceTest:
             # requests
             print("\n📊 requests performance test")
             try:
-                results["requests_sync"] = self.test_requests_sync(30, 0.5)
+                results["requests_sync"] = self.test_requests_sync(CONCURRENCY, DELAY)
                 print("   ✅ Completed requests test")
             except Exception as e:
                 print(f"   ⚠️ requests test failed: {e}")
