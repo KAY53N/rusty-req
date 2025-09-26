@@ -16,18 +16,18 @@ class PerformanceTest:
     def __init__(self):
         self.test_results = {}
         self.httpbin_url = os.getenv('HTTPBIN_URL', 'http://localhost:8080')
-        print(f"🌐 使用 httpbin 服务地址: {self.httpbin_url}")
+        print(f"🌐 Using httpbin service URL: {self.httpbin_url}")
 
     async def cooldown(self, seconds: int = 10):
-        """测试间隔冷却"""
-        print(f"⏳ 冷却 {seconds} 秒，等待 httpbin 恢复...")
+        """Cooldown between tests"""
+        print(f"⏳ Cooling down for {seconds} seconds, waiting for httpbin to recover...")
         await asyncio.sleep(seconds)
-        # 如果你用 docker 跑 httpbin，可以替换为:
+        # If you are running httpbin via docker, you can replace with:
         # os.system("docker restart httpbin")
 
     async def test_httpbin_connectivity(self):
-        """测试 httpbin 服务连接性"""
-        print("🔍 测试 httpbin 服务连接...")
+        """Check httpbin connectivity"""
+        print("🔍 Testing httpbin connectivity...")
 
         try:
             response = await rusty_req.fetch_single(
@@ -35,7 +35,7 @@ class PerformanceTest:
                 method="GET",
                 timeout=5.0
             )
-            print(f"📝 httpbin 响应详情: {response}")
+            print(f"📝 httpbin response details: {response}")
 
             http_status = response.get("http_status")
             if isinstance(http_status, str):
@@ -51,18 +51,18 @@ class PerformanceTest:
             has_error = exception.get("type") is not None
 
             if http_status == 200 and not has_error:
-                print("✅ httpbin 服务连接正常")
+                print("✅ httpbin connectivity OK")
                 return True
             else:
-                print(f"❌ httpbin 服务响应异常 - 状态码: {http_status}, 错误: {exception}")
+                print(f"❌ httpbin abnormal response - status: {http_status}, error: {exception}")
                 return False
 
         except Exception as e:
-            print(f"❌ httpbin 服务连接失败: {e}")
+            print(f"❌ httpbin connectivity failed: {e}")
             return False
 
     async def test_rusty_req_batch(self, num_requests: int = 100, delay: float = 1.0) -> Dict[str, Any]:
-        print(f"🚀 测试 rusty-req 批量请求 ({num_requests} 个请求, 延迟 {delay}s)...")
+        print(f"🚀 Testing rusty-req batch mode ({num_requests} requests, {delay}s delay)...")
 
         requests_list = [
             rusty_req.RequestItem(
@@ -122,7 +122,7 @@ class PerformanceTest:
         }
 
     async def test_rusty_req_single(self, num_requests: int = 100, delay: float = 1.0) -> Dict[str, Any]:
-        print(f"🚀 测试 rusty-req 单个请求 ({num_requests} 个请求, 延迟 {delay}s)...")
+        print(f"🚀 Testing rusty-req single mode ({num_requests} requests, {delay}s delay)...")
 
         start_time = time.perf_counter()
         successful = 0
@@ -179,7 +179,7 @@ class PerformanceTest:
         }
 
     async def test_httpx_async(self, num_requests: int = 100, delay: float = 1.0) -> Dict[str, Any]:
-        print(f"🚀 测试 httpx 异步请求 ({num_requests} 个请求, 延迟 {delay}s)...")
+        print(f"🚀 Testing httpx async ({num_requests} requests, {delay}s delay)...")
 
         start_time = time.perf_counter()
         successful = 0
@@ -215,7 +215,7 @@ class PerformanceTest:
         }
 
     async def test_aiohttp(self, num_requests: int = 100, delay: float = 1.0) -> Dict[str, Any]:
-        print(f"🚀 测试 aiohttp ({num_requests} 个请求, 延迟 {delay}s)...")
+        print(f"🚀 Testing aiohttp ({num_requests} requests, {delay}s delay)...")
 
         start_time = time.perf_counter()
         successful = 0
@@ -256,7 +256,7 @@ class PerformanceTest:
         }
 
     def test_requests_sync(self, num_requests: int = 50, delay: float = 1.0) -> Dict[str, Any]:
-        print(f"🚀 测试 requests 同步请求 ({num_requests} 个请求, 延迟 {delay}s)...")
+        print(f"🚀 Testing requests sync ({num_requests} requests, {delay}s delay)...")
 
         def make_request():
             try:
@@ -290,60 +290,60 @@ class PerformanceTest:
 
     async def run_comprehensive_test(self):
         print("=" * 60)
-        print("🎯 开始 rusty-req 综合性能测试")
+        print("🎯 Starting rusty-req benchmark")
         print("=" * 60)
 
         if not await self.test_httpbin_connectivity():
-            print("❌ httpbin 服务不可用，测试终止")
+            print("❌ httpbin is not available, aborting tests")
             return {}
 
         rusty_req.set_debug(False)
         results = {}
 
         try:
-            # rusty-req 批量
-            print("\n📊 批量请求性能测试")
+            # rusty-req batch
+            print("\n📊 rusty-req batch benchmark")
             result = await self.test_rusty_req_batch(50, 0.5)
             results["rusty_req_batch"] = result
-            print("   ✅ 完成批量请求性能测试")
+            print("   ✅ Completed batch benchmark")
             await self.cooldown(10)
 
-            # rusty-req 单个
-            print("\n📊 单个请求性能测试")
+            # rusty-req single
+            print("\n📊 rusty-req single benchmark")
             result = await self.test_rusty_req_single(50, 0.5)
             results["rusty_req_single"] = result
-            print("   ✅ 完成单个请求性能测试")
+            print("   ✅ Completed single benchmark")
             await self.cooldown(10)
 
             # httpx
-            print("\n📊 httpx 性能测试")
+            print("\n📊 httpx benchmark")
             try:
                 results["httpx_async"] = await self.test_httpx_async(50, 0.5)
-                print("   ✅ 完成 httpx 测试")
+                print("   ✅ Completed httpx benchmark")
             except Exception as e:
-                print(f"   ⚠️ httpx 测试失败: {e}")
+                print(f"   ⚠️ httpx benchmark failed: {e}")
             await self.cooldown(10)
 
             # aiohttp
-            print("\n📊 aiohttp 性能测试")
+            print("\n📊 aiohttp benchmark")
             try:
                 results["aiohttp"] = await self.test_aiohttp(50, 0.5)
-                print("   ✅ 完成 aiohttp 测试")
+                print("   ✅ Completed aiohttp benchmark")
             except Exception as e:
-                print(f"   ⚠️ aiohttp 测试失败: {e}")
+                print(f"   ⚠️ aiohttp benchmark failed: {e}")
             await self.cooldown(10)
 
             # requests
-            print("\n📊 requests 性能测试")
+            print("\n📊 requests benchmark")
             try:
                 results["requests_sync"] = self.test_requests_sync(30, 0.5)
-                print("   ✅ 完成 requests 测试")
+                print("   ✅ Completed requests benchmark")
             except Exception as e:
-                print(f"   ⚠️ requests 测试失败: {e}")
+                print(f"   ⚠️ requests benchmark failed: {e}")
             await self.cooldown(10)
 
         except Exception as e:
-            print(f"❌ 测试过程中发生错误: {e}")
+            print(f"❌ Error during benchmark: {e}")
             import traceback
             traceback.print_exc()
 
@@ -351,22 +351,22 @@ class PerformanceTest:
 
     def print_results(self, results: Dict[str, Any]):
         print("\n" + "=" * 80)
-        print("📋 性能测试报告")
+        print("📋 Benchmark Report")
         print("=" * 80)
 
         for test_name, result in results.items():
             print(f"\n📊 {result['library']} ({result.get('mode', 'default')}):")
-            print(f"   总请求数: {result['total_requests']}")
-            print(f"   成功请求: {result['successful']}")
-            print(f"   失败请求: {result['failed']}")
-            print(f"   成功率: {result['success_rate']:.1f}%")
-            print(f"   总耗时: {result['total_time']:.2f} 秒")
-            print(f"   请求速率: {result['requests_per_second']:.1f} req/s")
-            print(f"   平均响应时间: {result['avg_response_time']*1000:.1f} ms")
+            print(f"   Total Requests: {result['total_requests']}")
+            print(f"   Successful: {result['successful']}")
+            print(f"   Failed: {result['failed']}")
+            print(f"   Success Rate: {result['success_rate']:.1f}%")
+            print(f"   Total Time: {result['total_time']:.2f} s")
+            print(f"   Throughput: {result['requests_per_second']:.1f} req/s")
+            print(f"   Avg Response Time: {result['avg_response_time']*1000:.1f} ms")
             if 'memory_usage' in result:
-                print(f"   内存使用: {result['memory_usage']:.1f} MB")
+                print(f"   Memory Usage: {result['memory_usage']:.1f} MB")
 
-        print(f"\n🏆 性能排行 (按请求速率):")
+        print(f"\n🏆 Ranking (by throughput):")
         performance_data = []
         for result in results.values():
             if 'requests_per_second' in result:
@@ -378,7 +378,7 @@ class PerformanceTest:
 
         performance_data.sort(key=lambda x: x[1], reverse=True)
         for i, (lib, rps, success_rate) in enumerate(performance_data, 1):
-            print(f"   {i}. {lib}: {rps:.1f} req/s (成功率: {success_rate:.1f}%)")
+            print(f"   {i}. {lib}: {rps:.1f} req/s (Success Rate: {success_rate:.1f}%)")
 
 
 async def main():
@@ -387,7 +387,7 @@ async def main():
     try:
         results = await tester.run_comprehensive_test()
         if not results:
-            print("❌ 测试失败，无结果数据")
+            print("❌ Benchmark failed, no results generated")
             return
 
         tester.print_results(results)
@@ -398,10 +398,10 @@ async def main():
         with open(filename, "w", encoding="utf-8") as f:
             json.dump(results, f, indent=2, ensure_ascii=False)
 
-        print(f"\n💾 测试结果已保存到 {filename}")
+        print(f"\n💾 Results saved to {filename}")
 
     except Exception as e:
-        print(f"❌ 测试过程中发生错误: {e}")
+        print(f"❌ Error during benchmark: {e}")
         import traceback
         traceback.print_exc()
 
@@ -409,10 +409,10 @@ async def main():
 if __name__ == "__main__":
     try:
         import rusty_req
-        print("✅ 所有依赖库检查通过")
+        print("✅ All required dependencies are installed")
     except ImportError as e:
-        print(f"❌ 缺少依赖库: {e}")
-        print("请安装: pip install rusty-req")
+        print(f"❌ Missing dependency: {e}")
+        print("Please install: pip install rusty-req")
         exit(1)
 
     optional_deps = []
@@ -420,27 +420,27 @@ if __name__ == "__main__":
         import aiohttp
         optional_deps.append("aiohttp")
     except ImportError:
-        print("⚠️ aiohttp 未安装，将跳过相关测试")
+        print("⚠️ aiohttp not installed, skipping related benchmark")
 
     try:
         import httpx
         optional_deps.append("httpx")
     except ImportError:
-        print("⚠️ httpx 未安装，将跳过相关测试")
+        print("⚠️ httpx not installed, skipping related benchmark")
 
     try:
         import requests
         optional_deps.append("requests")
     except ImportError:
-        print("⚠️ requests 未安装，将跳过相关测试")
+        print("⚠️ requests not installed, skipping related benchmark")
 
     try:
         import psutil
         optional_deps.append("psutil")
     except ImportError:
-        print("⚠️ psutil 未安装，将跳过内存监控")
+        print("⚠️ psutil not installed, skipping memory monitoring")
 
     if optional_deps:
-        print(f"✅ 可选依赖已安装: {', '.join(optional_deps)}")
+        print(f"✅ Optional dependencies installed: {', '.join(optional_deps)}")
 
     asyncio.run(main())
