@@ -32,7 +32,7 @@ jobs:
         pip install rusty-req aiohttp httpx requests psutil
     
     - name: 运行性能测试
-      run: python performance_test.py
+      run: python tests/performance_test.py
       env:
         HTTPBIN_URL: http://localhost:8080
     
