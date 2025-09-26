@@ -20,5 +20,4 @@ target
 #  option (not recommended) you can uncomment the following to ignore the entire idea folder.
 .idea
 tests/.idea
-tests/*
 Cargo.lock
