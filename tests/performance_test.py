@@ -12,7 +12,7 @@ from concurrent.futures import ThreadPoolExecutor
 import os
 
 # Global settings
-GLOBAL_CONCURRENCY = 500  # Updated concurrency
+GLOBAL_CONCURRENCY = 700  # Updated concurrency
 TOTAL_TIMEOUT = 5.0  # Total timeout for all requests
 REQUEST_TIMEOUT = 3.5  # Timeout per request
 
