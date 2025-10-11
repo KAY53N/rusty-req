@@ -1,7 +1,7 @@
 ---
 name: Bug report
 about: Create a report to help us improve
-title: "[Bug] Memory leak in [component] when handling [scenario]"
+title: "[Bug] Title explaining the bug"
 labels: ''
 assignees: ''
 
