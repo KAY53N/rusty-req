@@ -11,6 +11,10 @@ use crate::{ConcurrencyMode, ProxyConfig, DEFAULT_USER_AGENT, GLOBAL_CLIENT, GLO
 use crate::debug::debug_log;
 use crate::utils::{format_datetime, py_to_json};
 
+/// Per-request timeout used when the caller does not supply one, in seconds.
+/// Matches the default documented in the README and `rusty_req.pyi`.
+const DEFAULT_TIMEOUT_SECS: f64 = 30.0;
+
 pub(crate) async fn create_reqwest_client(
     request_url: &str,
     proxy_config: &Option<ProxyConfig>,
@@ -123,7 +127,23 @@ pub async fn execute_single_request(req: RequestItem, _base_client: Option<Clien
     let method = method.parse::<reqwest::Method>().unwrap_or(reqwest::Method::GET);
 
     let mut request_builder = client.request(method.clone(), &req.url);
-    let timeout = Duration::from_secs_f64(req.timeout.unwrap_or(30.0).max(3.0));
+    // Honour the caller's timeout exactly as given.
+    //
+    // This previously applied `.max(3.0)`, which silently raised every
+    // sub-3s timeout to 3s - a `timeout=0.5` request still waited a full
+    // three seconds. The floor was undocumented in both the README and
+    // rusty_req.pyi, so from Python the call simply took up to 6x longer
+    // than asked, which defeats fail-fast health checks, tight per-attempt
+    // retry budgets, and any caller with a sub-3s latency SLA.
+    //
+    // Only guard against values reqwest/tokio cannot act on - non-finite or
+    // non-positive - falling back to the documented default in that case.
+    let requested = req.timeout.unwrap_or(DEFAULT_TIMEOUT_SECS);
+    let timeout = Duration::from_secs_f64(if requested.is_finite() && requested > 0.0 {
+        requested
+    } else {
+        DEFAULT_TIMEOUT_SECS
+    });
     request_builder = request_builder.timeout(timeout);
 
     // headers
