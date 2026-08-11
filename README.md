@@ -192,23 +192,83 @@ The `fetch_requests` function supports two powerful concurrency strategies. Choo
     -   **Success Case**: Only if *every single request was successful* will it return the complete list of successful results.
     -   **Failure Case**: If *even one request fails* for any reason (e.g., its individual timeout, a network error, or a non-2xx status code), this mode will discard all results and return a list where **every request is marked as a global failure.**
 
-### 4. Timeout Performance Comparison
+### 4. Timeout Performance Comparison (SLA showdown)
 
-Under the same test conditions (global timeout 3s, per-request timeout 2.6s, httpbin delay 2.3s), we compared the performance of different libraries:
+Same hard SLA for every library:
 
-| Library / Framework | Total Requests | Successful | Timed Out | Success Rate | Actual Total Time | Notes / Description |
-|--------------------|----------------|------------|-----------|--------------|-------------------|-------------------|
-| **Rusty-req**      | 1000           | 1000       | 0         | 100.0%       | 2.56s             | Stable performance under high concurrency; precise control of per-request and total timeouts |
-| **httpx**          | 1000           | 0          | 0         | 0.0%         | 26.77s            | Timeout parameters did not take effect; overall performance abnormal |
-| **aiohttp**        | 1000           | 100        | 900       | 10.0%        | 2.66s             | Per-request timeout effective, but global timeout control insufficient |
-| **requests**       | 1000           | 1000       | 0         | 100.0%       | 3.45s             | Synchronous blocking mode; not suitable for large-scale concurrent requests |
+| Parameter | Value |
+|-----------|--------|
+| Server delay | **2.3s** (`/delay/2.3`) |
+| Per-request timeout | **2.9s** |
+| Batch / global budget | **3.0s** |
+| Concurrency ladder | **N = 3000 → 6000 → 9000** (full burst each level) |
+
+Measured on **0.4.26** (local go-httpbin). Anyone can reproduce after clone:
+
+#### How we run the benchmark
+
+```bash
+# 0) clone & enter the repo
+git clone https://github.com/KAY53N/rusty-req.git
+cd rusty-req
+
+# 1) Python deps for the four clients under test
+pip install maturin aiohttp httpx requests
+
+# 2) build / install this repo's rusty-req (recommended: from source)
+#    needs a working Rust toolchain (rustup)
+maturin develop --release
+# alternative: pip install rusty-req   # PyPI wheel; version may lag main
+
+# 3) start a local delay server (go-httpbin; multi-arch, good under load)
+#    avoid kennethreitz/httpbin on Apple Silicon — often 502 under concurrency
+docker run -d --name httpbin -p 8080:8080 mccutchen/go-httpbin:latest
+# wait until healthy
+curl -sf http://127.0.0.1:8080/status/200
+
+# 4) clear proxy env so local traffic is not hijacked
+unset http_proxy https_proxy HTTP_PROXY HTTPS_PROXY ALL_PROXY all_proxy
+
+# 5) run the SLA showdown (default stages: 3000, 6000, 9000)
+HTTPBIN_URL=http://127.0.0.1:8080 python tests/sla_showdown.py
+
+# optional variants:
+#   python tests/sla_showdown.py --stages 3000,6000           # shorter run
+#   python tests/sla_showdown.py                             # no Docker: embedded /delay server
+#   python tests/sla_showdown.py --single-timeout 2.9 --total-timeout 3.0 --delay 2.3
+```
+
+What the script does:
+
+1. For each concurrency level **N**, fires **N** concurrent GETs to `/delay/2.3`.
+2. Compares **rusty-req**, **httpx**, **aiohttp**, **requests** under the same timeouts.
+3. Prints **success rate**, **wall time**, whether the batch stayed within the 3s SLA, **http_status** mix, and (for rusty-req) **exception.type** mix.
+4. Writes `tests/sla_showdown_result.json` (gitignored) for local inspection.
+
+Notes:
+
+- **requests** uses at most **32 OS threads** on purpose (safe on macOS). That is not N-way concurrency.
+- Do not point the bench at a corporate HTTP proxy for `127.0.0.1`.
+- Numbers vary slightly by machine / Docker; the relative ranking is what matters.
+
+| Library | N=3000 success / time | N=6000 success / time | N=9000 success / time | Notes |
+|---------|----------------------|----------------------|----------------------|-------|
+| **rusty-req** | **100.00%** / 2.72s | **100.00%** / 2.86s | **69.20%** / 2.94s | Native dual timeouts; full success at 3k/6k inside the 3s SLA |
+| **httpx** | **0.00%** / 10.38s | **0.00%** / 42.13s | **0.00%** / 104.33s | Misses the global budget; wall time overshoots badly on cancel |
+| **aiohttp** | **0.00%** / 3.42s | **0.00%** / 3.98s | **0.00%** / 5.67s | Fails the same tight SLA from 3k upward |
+| **requests** | **1.10%** / 3.02s | **0.50%** / 3.02s | **0.40%** / 3.39s | Only ~32 successes each run (32-thread pool); not N-way concurrent |
+
+`rusty-req` detail:
+
+- N=3000 / 6000: **http_status 200 = 100%**, **exception empty = 100%**
+- N=9000: **http_status 200 = 69.20%**, **0 = 30.80%**; exception **None 69.20%** / **HttpError 30.80%** (still finishes inside ~2.94s)
 
 Key takeaways:
-- **Rusty-req** can complete tasks within strict global timeout limits while maintaining high concurrency and stability.
-- Traditional asynchronous libraries struggle with global timeout enforcement and extreme concurrency scenarios.
-- Synchronous libraries like `requests` produce correct results but are not scalable for large-scale concurrent requests.
+- **rusty-req** holds **100%** success at **3000** and **6000** concurrent requests within the global timeout; at **9000** it still completes the batch in **2.94s** with ~69% success under machine/Docker pressure.
+- **aiohttp** and **httpx** are **0%** across these high-concurrency SLA levels; httpx wall time grows to **10s / 42s / 104s**.
+- **requests** stays around **~32 OK** regardless of N (thread cap); the falling % is mostly a larger denominator, not better throughput.
 
-![Timeout Performance Comparison](https://raw.githubusercontent.com/KAY53N/rusty-req/main/docs/images/timeout_performance_comparison.png)
+![Timeout Performance Comparison](docs/images/timeout_performance_comparison.png)
 
 ---
 
@@ -414,10 +474,6 @@ Both `fetch_single` and `fetch_requests` return a dictionary (or a list of dicti
 For a detailed list of changes, see the [CHANGELOG](CHANGELOG.md)
 
 ---
-
-## Star History
-
-[![Star History Chart](https://api.star-history.com/svg?repos=KAY53N/rusty-req&type=Date)](https://www.star-history.com/#KAY53N/rusty-req&Date)
 
 ## 📄 License
 This project is licensed under the [MIT License](https://opensource.org/license/MIT).

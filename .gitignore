@@ -21,3 +21,8 @@ target
 .idea
 tests/.idea
 Cargo.lock
+
+# Local benchmark outputs (regenerate with tests/sla_showdown.py)
+tests/sla_showdown_result.json
+tests/readme_timeout_comparison_result.json
+rusty_req_benchmark_*.json

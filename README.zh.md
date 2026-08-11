@@ -189,23 +189,82 @@ if __name__ == "__main__":
     - **成功情况**：仅当 *每一个请求都成功* 时，才会返回完整的成功结果列表。
     - **失败情况**：如果 *任意一个请求失败*（例如单个超时、网络错误或非 2xx 状态码），整个批次将被视为失败，并返回一个列表，其中 **每个请求都被标记为全局失败**。
 
-### 4. 超时性能对比
+### 4. 超时性能对比（SLA 对决）
 
-在相同测试条件下（全局超时 3 秒，每个请求超时 2.6 秒，httpbin 延迟 2.3 秒），我们对比了不同库的性能：
+所有库使用同一套硬超时预算：
 
-| 库 / 框架           | 请求总数 | 成功数 | 超时数 | 成功率 | 实际总耗时  | 说明 / 特点 |
-|--------------------|---------|--------|--------|--------|--------|------------|
-| **Rusty-req**      | 1000    | 1000   | 0      | 100.0% | 2.56s  | 高并发下性能稳定；可以精确控制每个请求和全局超时 |
-| **httpx**          | 1000    | 0      | 0      | 0.0%   | 26.77s | 超时参数未生效，整体性能异常 |
-| **aiohttp**        | 1000    | 100    | 900    | 10.0%  | 2.66s  | 单请求超时有效，但全局超时控制不足 |
-| **requests**       | 1000    | 1000   | 0      | 100.0% | 3.45s  | 同步阻塞模式，不适合大规模并发请求 |
+| 参数 | 值 |
+|------|-----|
+| 服务端 delay | **2.3s**（`/delay/2.3`） |
+| 单请求 timeout | **2.9s** |
+| 整批 / 全局预算 | **3.0s** |
+| 并发阶梯 | **N = 3000 → 6000 → 9000**（每档直接全量并发） |
+
+数据基于 **0.4.26**（本机 go-httpbin）。clone 后可按下面流程自行复现：
+
+#### 我们如何跑压测
+
+```bash
+# 0) 克隆并进入仓库
+git clone https://github.com/KAY53N/rusty-req.git
+cd rusty-req
+
+# 1) 安装四个对比库所需的 Python 依赖
+pip install maturin aiohttp httpx requests
+
+# 2) 编译安装本仓库的 rusty-req（推荐从源码，需已安装 Rust / rustup）
+maturin develop --release
+# 也可：pip install rusty-req   # PyPI 轮子，版本可能落后于 main
+
+# 3) 启动本地 delay 服务（go-httpbin，多架构，高并发更稳）
+#    Apple Silicon 上不建议用 kennethreitz/httpbin（高并发常 502）
+docker run -d --name httpbin -p 8080:8080 mccutchen/go-httpbin:latest
+# 等待就绪
+curl -sf http://127.0.0.1:8080/status/200
+
+# 4) 清掉代理环境变量，避免本地请求被代理劫持
+unset http_proxy https_proxy HTTP_PROXY HTTPS_PROXY ALL_PROXY all_proxy
+
+# 5) 跑 SLA 对决（默认档位：3000、6000、9000）
+HTTPBIN_URL=http://127.0.0.1:8080 python tests/sla_showdown.py
+
+# 可选：
+#   python tests/sla_showdown.py --stages 3000,6000           # 更快一档
+#   python tests/sla_showdown.py                             # 无 Docker：内嵌 /delay 服务
+#   python tests/sla_showdown.py --single-timeout 2.9 --total-timeout 3.0 --delay 2.3
+```
+
+脚本会做什么：
+
+1. 对每个并发档 **N**，同时发出 **N** 个 GET 到 `/delay/2.3`。
+2. 在相同超时参数下对比 **rusty-req**、**httpx**、**aiohttp**、**requests**。
+3. 输出 **成功率**、**墙钟耗时**、是否压在 3s SLA 内、**http_status 占比**，以及 rusty-req 的 **exception.type 占比**。
+4. 结果写入 `tests/sla_showdown_result.json`（已 gitignore，仅本机查看）。
+
+说明：
+
+- **requests** 故意限制最多 **32** 条 OS 线程（macOS 安全），**不是** N 路真并发。
+- 不要让 `127.0.0.1` 走公司 HTTP 代理。
+- 绝对数字会随机器 / Docker 略有波动，看相对排名即可。
+
+| 库 | N=3000 成功率 / 耗时 | N=6000 成功率 / 耗时 | N=9000 成功率 / 耗时 | 说明 |
+|----|---------------------|---------------------|---------------------|------|
+| **rusty-req** | **100.00%** / 2.72s | **100.00%** / 2.86s | **69.20%** / 2.94s | 原生双超时；3k/6k 满分且压在 3s SLA 内 |
+| **httpx** | **0.00%** / 10.38s | **0.00%** / 42.13s | **0.00%** / 104.33s | 无法在全局预算内完成；取消时墙钟明显超标 |
+| **aiohttp** | **0.00%** / 3.42s | **0.00%** / 3.98s | **0.00%** / 5.67s | 同一紧 SLA 下从 3k 起成功率为 0 |
+| **requests** | **1.10%** / 3.02s | **0.50%** / 3.02s | **0.40%** / 3.39s | 每档大约只成功 **~32** 个（32 线程池），不是 N 路真并发 |
+
+`rusty-req` 细节：
+
+- N=3000 / 6000：返回结构 **http_status 200 = 100%**，**exception 为空 = 100%**
+- N=9000：**http_status 200 = 69.20%**，**0 = 30.80%**；exception **None 69.20%** / **HttpError 30.80%**（整批仍约 2.94s 结束）
 
 关键结论：
-- **Rusty-req** 可以在严格的全局超时限制下完成任务，同时保持高并发和稳定性。
-- 传统异步库在全局超时和极高并发场景下表现欠佳。
-- 同步库如 `requests` 虽然能得到正确结果，但不适合大规模并发请求。
+- **rusty-req** 在 **3000 / 6000** 并发下均为 **100%** 成功，并在全局超时内返回（2.72s / 2.86s）；**9000** 时仍约 **69%** 成功、耗时 **2.94s**。
+- **aiohttp**、**httpx** 在这三档高并发 SLA 下成功率均为 **0%**；httpx 墙钟可达 **10s / 42s / 104s**。
+- **requests** 成功数基本锁在 **~32**（线程帽）；成功率下降主要是分母变大，并非吞吐变强。
 
-![超时性能对比](https://raw.githubusercontent.com/KAY53N/rusty-req/main/docs/images/timeout_performance_comparison.png)
+![超时性能对比](docs/images/timeout_performance_comparison.png)
 
 ---
 
@@ -411,11 +470,6 @@ if __name__ == "__main__":
 ## 更新日志
 
 查看详细更新内容请访问 [CHANGELOG](CHANGELOG.md)
-
-## Star History
-
-[![Star History Chart](https://api.star-history.com/svg?repos=KAY53N/rusty-req&type=Date)](https://www.star-history.com/#KAY53N/rusty-req&Date)
-
 
 ## 📄 许可证
 本项目采用 [MIT License](https://opensource.org/license/MIT).
