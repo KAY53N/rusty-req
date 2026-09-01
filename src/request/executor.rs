@@ -289,7 +289,11 @@ pub fn fetch_single<'py>(
         let result = execute_single_request(req, None).await;
         Python::with_gil(|py| -> PyResult<Py<PyAny>> {
             let dict = PyDict::new(py);
-            dict.set_item("response", &result["response"])?;
+            let response = result
+                .get("response")
+                .map(String::as_str)
+                .unwrap_or(r#"{"headers":{},"content":""}"#);
+            dict.set_item("response", response)?;
             dict.set_item("http_status", result.get("http_status").unwrap_or(&"0".to_string()))?;
             dict.set_item("meta", result.get("meta").unwrap_or(&"{}".to_string()))?;
             dict.set_item("exception", result.get("exception").unwrap_or(&"{}".to_string()))?;
@@ -324,7 +328,15 @@ pub fn fetch_requests<'py>(
             let py_list = PyList::empty(py);
             for res in final_results {
                 let dict = PyDict::new(py);
-                dict.set_item("response", &res["response"])?;
+                // Keep result conversion panic-free even if a future error
+                // path returns an incomplete map. Global timeout results
+                // normally include this field, but indexing a HashMap here
+                // would turn a recoverable request failure into RustPanic.
+                let response = res
+                    .get("response")
+                    .map(String::as_str)
+                    .unwrap_or(r#"{"headers":{},"content":""}"#);
+                dict.set_item("response", response)?;
 
                 if let Some(http_status_str) = res.get("http_status") {
                     if let Ok(http_status_int) = http_status_str.parse::<u16>() {
