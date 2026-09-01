@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.4.27] - 2026.09.01
+### Fixed
+- Prevent Rust panic when converting timed-out `fetch_requests` results.
+- Return a complete empty response object for incomplete error results.
+### Added
+- Add timeout regression and reproduction tests for `fetch_single` and `fetch_requests`.
+
 ## [0.4.26] - 2026.08.10
 ### Fixed
 - Honour per-request `timeout` values below 3 seconds instead of silently clamping them to 3s (#12)
