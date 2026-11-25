@@ -12,26 +12,13 @@ jobs:
       matrix:
         python-version: ["3.9", "3.10", "3.11", "3.12", "3.13"]
     container:
-      image: quay.io/pypa/manylinux_2_28_x86_64
+      image: quay.io/pypa/manylinux2014_x86_64
     steps:
       - uses: actions/checkout@v4
 
-      - name: Check package manager
-        run: |
-          if command -v yum; then
-            echo "yum 可用"
-            yum --help
-          elif command -v dnf; then
-            echo "dnf 可用"
-            dnf --help
-          else
-            echo "无 yum 和 dnf"
-            exit 1
-          fi
-
       - name: Install system dependencies
         run: |
-          dnf install -y openssl-devel pkgconfig
+          yum install -y openssl-devel pkgconfig gcc
 
       - name: Install Rust
         run: |
@@ -67,7 +54,7 @@ jobs:
           ${PYTHON_BIN}/pip install --upgrade pip
           ${PYTHON_BIN}/pip install maturin==1.9.2
           
-          ${PYTHON_BIN}/maturin build --release --manylinux 2_28 --interpreter ${PYTHON_BIN}/python
+          ${PYTHON_BIN}/maturin build --release --manylinux 2_17 --interpreter ${PYTHON_BIN}/python
       - name: Upload Linux wheels
         uses: actions/upload-artifact@v4
         with:
