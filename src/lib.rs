@@ -22,6 +22,24 @@ static DEBUG_MODE: AtomicBool = AtomicBool::new(false);
 
 const DEFAULT_USER_AGENT: &str = "Rust/1.88.0 (6b00bc388) reqwest/0.11.27";
 
+/// Per-request timeout used when the caller does not supply one, in seconds.
+const DEFAULT_TIMEOUT_SECS: f64 = 30.0;
+
+/// Honour a caller timeout as given.
+///
+/// `.max(3.0)` used to silently raise every sub-3s timeout to 3s, so a
+/// `timeout=0.5` request still waited a full three seconds. Only reject
+/// values reqwest/tokio cannot act on (non-finite or non-positive) and fall
+/// back to the 30s default in that case.
+fn resolve_timeout_secs(timeout: Option<f64>) -> f64 {
+    let requested = timeout.unwrap_or(DEFAULT_TIMEOUT_SECS);
+    if requested.is_finite() && requested > 0.0 {
+        requested
+    } else {
+        DEFAULT_TIMEOUT_SECS
+    }
+}
+
 // 全局共享的HTTP客户端
 static GLOBAL_CLIENT: Lazy<Mutex<Client>> = Lazy::new(|| {
     Mutex::new(Client::builder()
@@ -228,6 +246,9 @@ async fn execute_single_request(
         }
 
         builder = builder.headers(headers);
+        // Override the client-level 30s timeout. Without this, any per-request
+        // timeout above 30s is silently capped and reqwest reports HttpError.
+        builder = builder.timeout(Duration::from_secs_f64(resolve_timeout_secs(req.timeout)));
 
         // 设置参数：GET 用 query，POST/PUT/PATCH 用 JSON body
         if let Some(params_dict) = &req.params {
@@ -255,7 +276,7 @@ async fn execute_single_request(
     });
 
     // 发起请求，使用单个请求超时控制
-    let timeout = Duration::from_secs_f64(req.timeout.unwrap_or(30.0).max(3.0));
+    let timeout = Duration::from_secs_f64(resolve_timeout_secs(req.timeout));
     let tag = req.tag.clone().unwrap_or_else(|| "no-tag".to_string());
     let request_to_send = builder.try_clone().unwrap().build().unwrap();
 
@@ -412,7 +433,10 @@ fn convert_results_to_python(results: Vec<HashMap<String, String>>) -> PyResult<
         results.into_iter().map(|res| {
             let dict = PyDict::new(py);
 
-            dict.set_item("response", &res["response"])?;
+            // Indexing a missing key panics. Keep conversion alive if a result
+            // map is incomplete; the field is still "" when present.
+            let response = res.get("response").map(String::as_str).unwrap_or("");
+            dict.set_item("response", response)?;
 
             if let Some(http_status_str) = res.get("http_status") {
                 if let Ok(http_status_int) = http_status_str.parse::<u16>() {
@@ -487,6 +511,9 @@ fn fetch_single<'py>(
             }
 
             builder = builder.headers(headers_map);
+            // Override the client-level 30s timeout. Without this, any per-request
+            // timeout above 30s is silently capped and reqwest reports HttpError.
+            builder = builder.timeout(Duration::from_secs_f64(resolve_timeout_secs(timeout)));
 
             // 设置参数：GET 用 query，POST/PUT/PATCH 用 JSON body
             if let Some(params_dict) = &params {
@@ -514,7 +541,7 @@ fn fetch_single<'py>(
         });
 
         // 发起请求
-        let request_timeout = Duration::from_secs_f64(timeout.unwrap_or(30.0).max(3.0));
+        let request_timeout = Duration::from_secs_f64(resolve_timeout_secs(timeout));
         let tag = tag.unwrap_or_else(|| "single-req".to_string());
         let request_to_send = builder.try_clone().unwrap().build().unwrap();
 
@@ -574,7 +601,8 @@ fn fetch_single<'py>(
         Python::with_gil(|py| -> PyResult<Py<PyAny>> {
             let dict = PyDict::new(py);
 
-            dict.set_item("response", &result["response"])?;
+            let response = result.get("response").map(String::as_str).unwrap_or("");
+            dict.set_item("response", response)?;
 
             if let Some(http_status_str) = result.get("http_status") {
                 if let Ok(http_status_int) = http_status_str.parse::<u16>() {
