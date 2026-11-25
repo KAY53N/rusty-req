@@ -143,8 +143,28 @@ jobs:
       - uses: actions/setup-python@v4
         with:
           python-version: ${{ matrix.python-version }}
-      - run: python -m pip install maturin
-      - run: python -m maturin build --release --interpreter python${{ matrix.python-version }}
+      - name: Install maturin
+        run: python -m pip install maturin==1.9.2
+      - name: Build wheel and repack ZIP
+        shell: pwsh
+        run: |
+          python -m maturin build --release --interpreter python
+          Get-ChildItem "target\wheels\*.whl" | ForEach-Object {
+            Write-Host "Repack ZIP: $($_.FullName)"
+            $tempDir = "temp_repack"
+            if (Test-Path $tempDir) { Remove-Item -Recurse -Force $tempDir }
+            Expand-Archive -Path $_.FullName -DestinationPath $tempDir -Force
+            Remove-Item -Force $_.FullName
+            Compress-Archive -Path "$tempDir\*" -DestinationPath $_.FullName -CompressionLevel Optimal
+            Remove-Item -Recurse -Force $tempDir
+          }
+      - name: Verify wheel ZIP
+        shell: pwsh
+        run: |
+          Get-ChildItem "target\wheels\*.whl" | ForEach-Object {
+            python -c "import zipfile,sys; z=zipfile.ZipFile(sys.argv[1]); bad=z.testzip(); assert bad is None, bad" $_.FullName
+            Write-Host "ZIP ok: $($_.Name)"
+          }
       - uses: actions/upload-artifact@v4
         with:
           name: wheels-windows-py${{ matrix.python-version }}
@@ -170,19 +190,27 @@ jobs:
         with:
           path: dist
           pattern: wheels-*
-          merge-multiple: true
 
       - name: Show downloaded artifacts
         run: |
           echo "=== dist 目录结构 ==="
-          ls -R dist || true
+          find dist -type f -name "*.whl" -exec ls -lh {} \;
 
-      - name: Collect all .whl files to final_dist
+      - name: Collect one clean wheel per filename
         run: |
           mkdir -p final_dist
-          find dist -type f -name "*.whl" -exec mv {} final_dist/ \;
+          find dist -type f -name "*.whl" | sort | while read -r wheel; do
+            base=$(basename "$wheel")
+            if [ -e "final_dist/$base" ]; then
+              echo "skip duplicate $base from $wheel"
+              continue
+            fi
+            python -c "import zipfile,sys; z=zipfile.ZipFile(sys.argv[1]); bad=z.testzip(); assert bad is None, bad" "$wheel"
+            cp "$wheel" "final_dist/$base"
+          done
           echo "=== final_dist 内容 ==="
           ls -lh final_dist
+          test "$(find final_dist -name '*.whl' | wc -l)" -eq 3
 
       - name: Check wheels with twine
         run: |
