@@ -11,50 +11,37 @@ jobs:
     strategy:
       matrix:
         python-version: ["3.9", "3.10", "3.11", "3.12", "3.13"]
-    container:
-      image: quay.io/pypa/manylinux2014_x86_64
     steps:
       - uses: actions/checkout@v4
 
-      - name: Install system dependencies
+      - name: Build manylinux 2.17 wheel in Docker
+        env:
+          PYTHON_VERSION: ${{ matrix.python-version }}
         run: |
-          yum install -y openssl-devel pkgconfig gcc
-
-      - name: Install Rust
-        run: |
-          curl https://sh.rustup.rs -sSf | sh -s -- -y
-          source $HOME/.cargo/env
-          echo 'export PATH=$HOME/.cargo/bin:$PATH' >> ~/.bashrc
-
-      - name: Set up Python & Build Wheel
-        shell: bash
-        run: |
-          source $HOME/.cargo/env
-          
-          PYTHON_VERSION=${{ matrix.python-version }}
-          PYTHON_TAG="cp${PYTHON_VERSION/./}-cp${PYTHON_VERSION/./}"
-          
-          PYTHON_DIR=""
-          for dir in /opt/python/${PYTHON_TAG}*; do
-            if [[ -d "$dir" ]]; then
-              PYTHON_DIR="$dir"
-              break
-            fi
-          done
-          
-          if [[ -z "$PYTHON_DIR" ]]; then
-            echo "❌ 没找到解释器目录 /opt/python/${PYTHON_TAG}*"
-            ls -1 /opt/python
-            exit 1
-          fi
-          
-          PYTHON_BIN="${PYTHON_DIR}/bin"
-          echo "✅ 使用解释器路径: ${PYTHON_BIN}"
-          
-          ${PYTHON_BIN}/pip install --upgrade pip
-          ${PYTHON_BIN}/pip install maturin==1.9.2
-          
-          ${PYTHON_BIN}/maturin build --release --manylinux 2_17 --interpreter ${PYTHON_BIN}/python
+          docker run --rm \
+            -e PYTHON_VERSION="$PYTHON_VERSION" \
+            -v "$GITHUB_WORKSPACE:/io" \
+            -w /io \
+            quay.io/pypa/manylinux2014_x86_64 \
+            bash -euxo pipefail -c '
+              yum install -y openssl-devel pkgconfig gcc curl;
+              curl https://sh.rustup.rs -sSf | sh -s -- -y;
+              source "$HOME/.cargo/env";
+              PYTHON_TAG="cp${PYTHON_VERSION/./}-cp${PYTHON_VERSION/./}";
+              PYTHON_DIR="";
+              for dir in /opt/python/${PYTHON_TAG}*; do
+                if [[ -d "$dir" ]]; then PYTHON_DIR="$dir"; break; fi;
+              done;
+              if [[ -z "$PYTHON_DIR" ]]; then
+                echo "No interpreter found: /opt/python/${PYTHON_TAG}*";
+                ls -1 /opt/python;
+                exit 1;
+              fi;
+              PYTHON_BIN="${PYTHON_DIR}/bin";
+              "${PYTHON_BIN}/pip" install --upgrade pip;
+              "${PYTHON_BIN}/pip" install maturin==1.9.2;
+              "${PYTHON_BIN}/maturin" build --release --manylinux 2_17 --interpreter "${PYTHON_BIN}/python";
+            '
       - name: Upload Linux wheels
         uses: actions/upload-artifact@v4
         with:
